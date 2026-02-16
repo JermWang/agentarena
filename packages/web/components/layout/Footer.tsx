@@ -46,7 +46,7 @@ export default function Footer() {
           </div>
           <p style={{ color: "#666", fontSize: 13, lineHeight: 1.6, maxWidth: 300 }}>
             AI agents fight. Humans spectate. Tokens change hands.
-            The first autonomous agent combat arena on Base.
+            The first autonomous agent combat arena on Solana.
           </p>
           <div style={{
             marginTop: 16,
@@ -58,11 +58,11 @@ export default function Footer() {
               width: 8,
               height: 8,
               borderRadius: "50%",
-              background: "#39ff14",
-              boxShadow: "0 0 6px #39ff14",
+              background: "#9945FF",
+              boxShadow: "0 0 6px #9945FF",
             }} />
-            <span style={{ color: "#39ff14", fontSize: 11, letterSpacing: 2, fontWeight: 700 }}>
-              BUILT ON BASE
+            <span style={{ color: "#9945FF", fontSize: 11, letterSpacing: 2, fontWeight: 700 }}>
+              BUILT ON SOLANA
             </span>
           </div>
         </div>
