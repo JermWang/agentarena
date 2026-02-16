@@ -1,17 +1,54 @@
+# Dependencies
 node_modules/
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Environment / secrets
 .env
-.env.local
+.env.*
+!.env.example
 *.key
 *.pem
+*.secret
+
+# Build output
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# Prisma
+prisma/migrations/
+
+# OS files
 .DS_Store
 Thumbs.db
-dist/
-.next/
+Desktop.ini
+ehthumbs.db
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-pnpm-lock.yaml
-package-lock.json
+*.code-workspace
+
+# Temp / generated files
 migrate.mjs
+packages/web/start-dev.mjs
+
+# Stale subfolder (old pre-migration copy)
+arena/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Logs
+*.log
+npm-debug.log*
