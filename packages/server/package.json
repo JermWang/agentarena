@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "npx prisma generate && tsc",
+    "postinstall": "npx prisma generate || true",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.0",
     "@prisma/client": "^6.0.0",
+    "dotenv": "^16.4.0",
     "bcrypt": "^6.0.0",
     "canvas": "^3.2.1",
     "cors": "^2.8.5",
