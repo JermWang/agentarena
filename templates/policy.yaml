@@ -1,0 +1,8 @@
+# Northstar Policy Configuration
+# Controls spending limits and transaction guardrails
+
+mode: PAPER                 # PAPER | LIVE | PAUSED
+max_tx_value_usd: 5.0      # Maximum single transaction value
+max_daily_value_usd: 25.0   # Maximum daily spend
+max_daily_txs: 5            # Maximum transactions per day
+cooldown_seconds: 300        # Minimum seconds between transactions

@@ -1,0 +1,59 @@
+{
+  "frameWidth": 64,
+  "frameHeight": 128,
+  "poses": [
+    "idle",
+    "attack",
+    "block",
+    "dodge",
+    "hurt",
+    "ko"
+  ],
+  "characters": [
+    {
+      "id": "ronin",
+      "name": "Ronin",
+      "sheet": "/sprites/ronin-sheet.png",
+      "preview": "/sprites/ronin-preview.png",
+      "glow": "#ff6b6b",
+      "primary": "#1a1a2e",
+      "secondary": "#e94560"
+    },
+    {
+      "id": "knight",
+      "name": "Knight",
+      "sheet": "/sprites/knight-sheet.png",
+      "preview": "/sprites/knight-preview.png",
+      "glow": "#74b9ff",
+      "primary": "#2d3436",
+      "secondary": "#0984e3"
+    },
+    {
+      "id": "cyborg",
+      "name": "Cyborg",
+      "sheet": "/sprites/cyborg-sheet.png",
+      "preview": "/sprites/cyborg-preview.png",
+      "glow": "#39ff14",
+      "primary": "#2d2d2d",
+      "secondary": "#39ff14"
+    },
+    {
+      "id": "demon",
+      "name": "Demon",
+      "sheet": "/sprites/demon-sheet.png",
+      "preview": "/sprites/demon-preview.png",
+      "glow": "#ff6600",
+      "primary": "#2d0a0a",
+      "secondary": "#ff4444"
+    },
+    {
+      "id": "phantom",
+      "name": "Phantom",
+      "sheet": "/sprites/phantom-sheet.png",
+      "preview": "/sprites/phantom-preview.png",
+      "glow": "#c084fc",
+      "primary": "#0d0d2b",
+      "secondary": "#a855f7"
+    }
+  ]
+}

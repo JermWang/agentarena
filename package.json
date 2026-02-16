@@ -1,0 +1,5 @@
+{
+  "name": "agent-battle-arena",
+  "private": true,
+  "workspaces": ["packages/*"]
+}

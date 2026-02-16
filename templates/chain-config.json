@@ -1,0 +1,10 @@
+{
+  "chains": [
+    {
+      "name": "Solana",
+      "rpc_url": "https://api.mainnet-beta.solana.com",
+      "chain_id": "solana-mainnet",
+      "explorer": "https://solscan.io"
+    }
+  ]
+}

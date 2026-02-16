@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  walletAddress   String        @id
+  balance         Decimal       @default(0) @db.Decimal(36, 18)
+  totalDeposited  Decimal       @default(0) @db.Decimal(36, 18)
+  totalWithdrawn  Decimal       @default(0) @db.Decimal(36, 18)
+  totalWagered    Decimal       @default(0) @db.Decimal(36, 18)
+  totalWon        Decimal       @default(0) @db.Decimal(36, 18)
+  createdAt       DateTime      @default(now())
+
+  agents          Agent[]
+  bets            Bet[]
+  transactions    Transaction[]
+}
+
+model Agent {
+  id              String      @id @default(cuid())
+  ownerWallet     String
+  username        String      @unique
+  characterId     String      @default("ronin")
+  skillsMd        String      @default("")
+  apiKeyHash      String
+  wins            Int         @default(0)
+  losses          Int         @default(0)
+  elo             Int         @default(1000)
+  createdAt       DateTime    @default(now())
+
+  owner           User        @relation(fields: [ownerWallet], references: [walletAddress])
+  fightsAsP1      Fight[]     @relation("FightP1")
+  fightsAsP2      Fight[]     @relation("FightP2")
+  fightsWon       Fight[]     @relation("FightWinner")
+
+  @@index([username])
+  @@index([elo])
+}
+
+model Fight {
+  id              String      @id @default(cuid())
+  agent1Id        String
+  agent2Id        String
+  winnerId        String?
+  wagerAmount     Decimal     @default(0) @db.Decimal(36, 18)
+  rakeAmount      Decimal     @default(0) @db.Decimal(36, 18)
+  status          String      @default("active")
+  currentRound    Int         @default(1)
+  p1RoundWins     Int         @default(0)
+  p2RoundWins     Int         @default(0)
+  createdAt       DateTime    @default(now())
+  completedAt     DateTime?
+
+  agent1          Agent       @relation("FightP1", fields: [agent1Id], references: [id])
+  agent2          Agent       @relation("FightP2", fields: [agent2Id], references: [id])
+  winner          Agent?      @relation("FightWinner", fields: [winnerId], references: [id])
+  rounds          FightRound[]
+  bets            Bet[]
+  treasury        TreasuryEntry[]
+}
+
+model FightRound {
+  id              String    @id @default(cuid())
+  fightId         String
+  round           Int
+  exchanges       Json
+  p1Hp            Int
+  p2Hp            Int
+  winnerId        String?
+  createdAt       DateTime  @default(now())
+
+  fight           Fight     @relation(fields: [fightId], references: [id])
+
+  @@unique([fightId, round])
+}
+
+model Bet {
+  id              String    @id @default(cuid())
+  fightId         String
+  walletAddress   String
+  backedAgentId   String
+  amount          Decimal   @db.Decimal(36, 18)
+  payout          Decimal?  @db.Decimal(36, 18)
+  status          String    @default("active")
+  createdAt       DateTime  @default(now())
+
+  fight           Fight     @relation(fields: [fightId], references: [id])
+  user            User      @relation(fields: [walletAddress], references: [walletAddress])
+
+  @@index([fightId])
+  @@index([walletAddress])
+}
+
+model Transaction {
+  id              String    @id @default(cuid())
+  walletAddress   String
+  type            String
+  amount          Decimal   @db.Decimal(36, 18)
+  referenceId     String?
+  txHash          String?
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [walletAddress], references: [walletAddress])
+
+  @@index([walletAddress])
+  @@index([type])
+}
+
+model TreasuryEntry {
+  id              String    @id @default(cuid())
+  fightId         String?
+  amount          Decimal   @db.Decimal(36, 18)
+  type            String
+  createdAt       DateTime  @default(now())
+
+  fight           Fight?    @relation(fields: [fightId], references: [id])
+}

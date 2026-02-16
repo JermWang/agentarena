@@ -1,0 +1,113 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id              String      @id
+  skillsMd        String
+  walletAddress   String?
+  characterId     String      @default("default")
+  balance         Decimal     @default(0) @db.Decimal(18, 2)
+  wins            Int         @default(0)
+  losses          Int         @default(0)
+  currentStreak   Int         @default(0)
+  totalEarnings   Decimal     @default(0) @db.Decimal(18, 2)
+  registeredAt    DateTime    @default(now())
+
+  challengesSent      Challenge[]  @relation("Challenger")
+  challengesReceived  Challenge[]  @relation("Target")
+  fightsAsP1          Fight[]      @relation("FightP1")
+  fightsAsP2          Fight[]      @relation("FightP2")
+  fightsWon           Fight[]      @relation("FightWinner")
+  sideBets            SideBet[]
+}
+
+model Challenge {
+  id              String    @id @default(cuid())
+  challengerId    String
+  targetId        String
+  wagerAmount     Decimal   @db.Decimal(18, 2)
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime?
+
+  challenger      Agent     @relation("Challenger", fields: [challengerId], references: [id])
+  target          Agent     @relation("Target", fields: [targetId], references: [id])
+  fight           Fight?
+}
+
+model Fight {
+  id              String      @id @default(cuid())
+  challengeId     String?     @unique
+  p1Id            String
+  p2Id            String
+  winnerId        String?
+  wagerAmount     Decimal     @db.Decimal(18, 2)
+  treasuryFee     Decimal     @default(0) @db.Decimal(18, 2)
+  winnerPayout    Decimal     @default(0) @db.Decimal(18, 2)
+  status          String      @default("active")
+  currentRound    Int         @default(1)
+  p1RoundWins     Int         @default(0)
+  p2RoundWins     Int         @default(0)
+  startedAt       DateTime    @default(now())
+  endedAt         DateTime?
+
+  challenge       Challenge?  @relation(fields: [challengeId], references: [id])
+  p1              Agent       @relation("FightP1", fields: [p1Id], references: [id])
+  p2              Agent       @relation("FightP2", fields: [p2Id], references: [id])
+  winner          Agent?      @relation("FightWinner", fields: [winnerId], references: [id])
+  exchanges       Exchange[]
+  sideBets        SideBet[]
+}
+
+model Exchange {
+  id              String    @id @default(cuid())
+  fightId         String
+  round           Int
+  exchangeNum     Int
+  p1Action        String
+  p2Action        String
+  p1Damage        Int       @default(0)
+  p2Damage        Int       @default(0)
+  p1HpAfter       Int
+  p2HpAfter       Int
+  narrative       String
+  createdAt       DateTime  @default(now())
+
+  fight           Fight     @relation(fields: [fightId], references: [id])
+
+  @@unique([fightId, round, exchangeNum])
+}
+
+model SideBet {
+  id              String    @id @default(cuid())
+  fightId         String
+  bettorId        String
+  predictedWinner String
+  amount          Decimal   @db.Decimal(18, 2)
+  payout          Decimal?  @db.Decimal(18, 2)
+  status          String    @default("active")
+  createdAt       DateTime  @default(now())
+
+  fight           Fight     @relation(fields: [fightId], references: [id])
+  bettor          Agent     @relation(fields: [bettorId], references: [id])
+}
+
+model TreasuryLedger {
+  id              String    @id @default(cuid())
+  fightId         String?
+  amount          Decimal   @db.Decimal(18, 2)
+  type            String
+  createdAt       DateTime  @default(now())
+}

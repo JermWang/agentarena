@@ -1,0 +1,72 @@
+IDLE ANIMATION SPRITE SHEETS - MANIFEST
+Generated: 2026-02-13
+Process: DALL-E 3 → PIL Resize → rembg Background Removal
+
+============================================================
+GENERATED FILES
+============================================================
+
+1. ronin-idle-sheet.png (124 KB)
+   - Dimensions: 1024x256 px (4 frames at 256x256 each)
+   - Character: Chibi samurai ronin with spiky dark hair, red headband, black kimono, katana
+   - Animation: Subtle breathing and hair/headband sway
+   - Transparency: Yes (RGBA)
+
+2. knight-idle-sheet.png (364 KB)
+   - Dimensions: 1024x256 px (4 frames at 256x256 each)
+   - Character: Chibi knight in silver plate armor, blue visor eyes, blue plume helmet, sword & shield
+   - Animation: Subtle breathing and plume sway
+   - Transparency: Yes (RGBA)
+
+3. cyborg-idle-sheet.png (196 KB)
+   - Dimensions: 1024x256 px (4 frames at 256x256 each)
+   - Character: Chibi cyborg with half-human half-metal face, green glowing tech suit, reactor core
+   - Animation: Circuit glow pulsing and subtle idle sway
+   - Transparency: Yes (RGBA)
+   - Note: Generated with softened prompt due to initial content policy rejection
+
+4. fire_spirit-idle-sheet.png (156 KB)
+   - Dimensions: 1024x256 px (4 frames at 256x256 each)
+   - Character: Chibi fire spirit with curved horns, yellow glowing eyes, fanged grin, red skin, fire in hand
+   - Animation: Flame flickering and menacing sway
+   - Transparency: Yes (RGBA)
+
+5. phantom-idle-sheet.png (110 KB)
+   - Dimensions: 1024x256 px (4 frames at 256x256 each)
+   - Character: Chibi phantom ghost in purple hooded cloak, glowing purple eyes, crystal staff
+   - Animation: Cloak flowing and crystal glowing
+   - Transparency: Yes (RGBA)
+
+============================================================
+TECHNICAL SPECIFICATIONS
+============================================================
+
+Format: PNG with alpha channel (RGBA)
+Resolution: 1024x256 pixels (4 frames of 256x256 each)
+Frame Count: 4 per character
+Total Characters: 5
+
+Generation Process:
+1. DALL-E 3 API called with model="dall-e-3", size="1024x1024"
+2. Generated 1024x1024 images downloaded
+3. PIL Image resized to 1024x256 using LANCZOS resampling
+4. rembg applied to remove background and create transparency
+5. Saved as PNG with RGBA color space
+
+All files are ready for use in game engine sprite animations.
+Each frame is exactly 256x256 pixels for easy sprite extraction.
+
+============================================================
+USAGE
+============================================================
+
+In a game engine, extract frames like this:
+
+Frame 0: pixels 0-255 (horizontal)
+Frame 1: pixels 256-511
+Frame 2: pixels 512-767
+Frame 3: pixels 768-1023
+
+Loop through frames 0-3 at desired animation speed (typically 100-200ms per frame).
+
+============================================================

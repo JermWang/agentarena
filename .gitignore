@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.local
+*.key
+*.pem
+.DS_Store
+Thumbs.db
+dist/
+.next/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+pnpm-lock.yaml
+package-lock.json
+migrate.mjs
