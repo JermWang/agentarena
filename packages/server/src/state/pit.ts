@@ -61,8 +61,8 @@ export class Pit {
     if (Date.now() - lastChat < 3000) return { ok: false, error: "Rate limited (3s)" };
     this.chatRateLimit.set(agentId, Date.now());
     const truncated = message.slice(0, 280);
-    this.broadcastToPit({
-      type: "pit_message",
+    this.broadcastPitEvent("pit_chat", {
+      agentId: agent.agentId,
       from: agent.username,
       character: agent.characterId,
       message: truncated,

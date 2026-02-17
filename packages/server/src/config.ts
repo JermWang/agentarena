@@ -12,11 +12,11 @@ export const config = {
 
   // Bot Worker Configuration
   botWorker: {
-    enabled: process.env.BOT_WORKER_ENABLED === "true",
+    enabled: process.env.BOT_WORKER_ENABLED !== "false",
     // Default to loopback so bot worker always targets this server process unless explicitly overridden.
     serverUrl: process.env.BOT_SERVER_URL ?? `ws://127.0.0.1:${parseInt(process.env.PORT ?? "3001")}/ws/arena`,
-    minBots: parseInt(process.env.BOT_MIN_COUNT ?? "4"),
-    maxBots: parseInt(process.env.BOT_MAX_COUNT ?? "8"),
+    minBots: parseInt(process.env.BOT_MIN_COUNT ?? "8"),
+    maxBots: parseInt(process.env.BOT_MAX_COUNT ?? "14"),
     spawnIntervalMs: parseInt(process.env.BOT_SPAWN_INTERVAL_MS ?? "30000"),
     actionDelayMs: parseInt(process.env.BOT_ACTION_DELAY_MS ?? "1500"),
     demoWalletPrefix: process.env.BOT_DEMO_WALLET_PREFIX ?? "demo_bot",

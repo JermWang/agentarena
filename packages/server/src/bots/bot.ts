@@ -29,6 +29,10 @@ const TRASH_TALK_LINES = [
   "Queue up or get called out.",
   "No fear. No lag. Just damage.",
   "Your stamina management is cooked.",
+  "You shipping patches or excuses?",
+  "I duel bots before breakfast.",
+  "Stop spectating and run the fade.",
+  "Your build is all bark, zero DPS.",
 ];
 
 const CALLOUT_LINES = [
@@ -37,6 +41,9 @@ const CALLOUT_LINES = [
   "Let's settle this in the arena.",
   "No more spectating. Fight me.",
   "You, me, now.",
+  "Pull up. Winner posts logs.",
+  "First to panic loses.",
+  "Lock in. Duel me.",
 ];
 
 export class ArenaBot {
@@ -217,7 +224,7 @@ export class ArenaBot {
       return;
     }
 
-    if (now - this.lastPitChatAt > 5000 && Math.random() < 0.22) {
+    if (now - this.lastPitChatAt > 3500 && Math.random() < 0.55) {
       this.lastPitChatAt = now;
       this.send({
         type: "pit_chat",
@@ -225,7 +232,7 @@ export class ArenaBot {
       });
     }
 
-    if (!this.isInQueue && now - this.lastCalloutAt > 12000 && Math.random() < 0.3) {
+    if (!this.isInQueue && now - this.lastCalloutAt > 8000 && Math.random() < 0.72) {
       const candidates = Array.from(this.pitAgents).filter((name) => name !== this.username);
       if (candidates.length > 0) {
         const target = candidates[Math.floor(Math.random() * candidates.length)];
@@ -262,13 +269,15 @@ export class ArenaBot {
       return;
     }
 
-    const accept = Math.random() < 0.72;
+    const accept = Math.random() < 0.9;
     this.send({
       type: accept ? "callout_accept" : "callout_decline",
       callout_id: msg.callout_id,
     });
 
     if (!accept) {
+      this.lastPitChatAt = Date.now();
+      this.send({ type: "pit_chat", message: "Not that wager. Run it back with better terms." });
       this.scheduleQueue(1500, 4500);
     }
   }
@@ -284,6 +293,13 @@ export class ArenaBot {
       case "callout_accepted":
       case "callout_declined":
         if (data?.from === this.username || data?.target === this.username) {
+          if (Math.random() < 0.6) {
+            this.lastPitChatAt = Date.now();
+            this.send({
+              type: "pit_chat",
+              message: event === "callout_accepted" ? "Deal locked. Let's scrap." : "Duckin' me? Queue up then.",
+            });
+          }
           this.scheduleQueue(1500, 5000);
         }
         break;
@@ -336,6 +352,13 @@ export class ArenaBot {
         console.log(`[Bot ${this.username}] Fight ended, winner: ${msg.winner}`);
         this.currentFight = null;
         this.clearActionTimer();
+        if (Math.random() < 0.65) {
+          this.lastPitChatAt = Date.now();
+          this.send({
+            type: "pit_chat",
+            message: msg.winner === this.agentId ? "Another one down. Next." : "Run it back. I downloaded your pattern.",
+          });
+        }
         // Re-queue after short delay, leaving room for pit behavior.
         this.scheduleQueue(2000, 6000);
         break;
