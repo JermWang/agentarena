@@ -238,6 +238,7 @@ function PitAgentSprite({
   globalFrame: number;
 }) {
   const [wanderTarget, setWanderTarget] = useState({ x: 0, y: 0 });
+  const [wanderFacing, setWanderFacing] = useState<1 | -1>(1);
   const { pos: effectivePos, isInWager, facingRight } = getEffectivePosition(agent, wagers, allAgents);
 
   // Update wander target every 3 seconds — CSS transition handles interpolation
@@ -248,7 +249,13 @@ function PitAgentSprite({
     }
     const update = () => {
       const t = Date.now() / 1000;
-      setWanderTarget(getWanderOffset(agent.agentId, t));
+      const next = getWanderOffset(agent.agentId, t);
+      setWanderTarget((prev) => {
+        // Face in the direction of movement
+        const dx = next.x - prev.x;
+        if (Math.abs(dx) > 0.05) setWanderFacing(dx > 0 ? 1 : -1);
+        return next;
+      });
     };
     update();
     const iv = setInterval(update, 3000);
@@ -260,7 +267,7 @@ function PitAgentSprite({
   const spriteSize = Math.round(130 * depthScale);
   const sheetSize = spriteSize * 4;
   const sheetUrl = `/sprites/${agent.characterId}-idle-sheet.png`;
-  const flip = isInWager ? (facingRight ? 1 : -1) : 1;
+  const flip = isInWager ? (facingRight ? 1 : -1) : wanderFacing;
 
   // Bubble age for fade-out (0-1 where 1 = fresh, 0 = expired)
   const bubbleAge = bubble ? Math.max(0, 1 - (Date.now() - bubble.timestamp) / 5000) : 0;
