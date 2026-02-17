@@ -98,8 +98,31 @@ function hashCode(s: string): number {
   return Math.abs(h);
 }
 
-function getAgentPosition(agentId: string): { x: number; y: number } {
+function fract(value: number): number {
+  return value - Math.floor(value);
+}
+
+function getAgentPosition(agentId: string, allAgents?: PitAgent[]): { x: number; y: number } {
   const h = hashCode(agentId);
+
+  // Use roster-aware low-discrepancy placement so online agents spread
+  // across the full pit instead of clustering near the middle.
+  if (allAgents && allAgents.length > 1) {
+    const sorted = [...allAgents].sort((a, b) => a.agentId.localeCompare(b.agentId));
+    const index = sorted.findIndex((a) => a.agentId === agentId);
+    if (index >= 0) {
+      const seed1 = (h % 997) / 997;
+      const seed2 = ((h >> 7) % 991) / 991;
+      const xRatio = fract(index * 0.61803398875 + seed1);
+      const yRatio = fract(index * 0.38196601125 + seed2);
+
+      const x = PIT_BOUNDS.xMin + xRatio * (PIT_BOUNDS.xMax - PIT_BOUNDS.xMin);
+      const y = PIT_BOUNDS.yMin + yRatio * (PIT_BOUNDS.yMax - PIT_BOUNDS.yMin);
+      return { x, y };
+    }
+  }
+
+  // Stable fallback for unknown roster state.
   const x = PIT_BOUNDS.xMin + (h % 1000) / 1000 * (PIT_BOUNDS.xMax - PIT_BOUNDS.xMin);
   const y = PIT_BOUNDS.yMin + ((h >> 10) % 1000) / 1000 * (PIT_BOUNDS.yMax - PIT_BOUNDS.yMin);
   return { x, y };
@@ -121,8 +144,8 @@ function getWanderOffset(agentId: string, timeSec: number): { x: number; y: numb
 // Screen coordinate conversion
 function toScreen(pos: { x: number; y: number }, wander: { x: number; y: number } = { x: 0, y: 0 }) {
   const depthScale = 1.0 - pos.y * 0.3;
-  const screenX = 50 + pos.x * 22 + wander.x;
-  const bottomPct = 2 + pos.y * 38 + wander.y;
+  const screenX = 50 + pos.x * 29 + wander.x;
+  const bottomPct = 2 + pos.y * 40 + wander.y;
   const zIdx = Math.round((1 - pos.y) * 30) + 10;
   return { screenX, bottomPct, depthScale, zIdx };
 }
@@ -137,7 +160,7 @@ function getEffectivePosition(
     (w) => (w.from === agent.username || w.target === agent.username) && w.status !== "declined"
   );
 
-  const basePos = getAgentPosition(agent.agentId);
+  const basePos = getAgentPosition(agent.agentId, allAgents);
 
   if (!activeWager) {
     return { pos: basePos, isInWager: false, facingRight: true };
@@ -149,7 +172,7 @@ function getEffectivePosition(
     return { pos: basePos, isInWager: true, facingRight: true };
   }
 
-  const theirPos = getAgentPosition(otherAgent.agentId);
+  const theirPos = getAgentPosition(otherAgent.agentId, allAgents);
   const meetX = (basePos.x + theirPos.x) / 2;
   const meetY = Math.min((basePos.y + theirPos.y) / 2, PIT_BOUNDS.yMax * 0.7);
 
@@ -364,8 +387,8 @@ function WagerNegotiationWindow({ wager, agents }: { wager: WagerWindow; agents:
   if (!fromAgent || !targetAgent) return null;
 
   // Position at meeting point between agents
-  const fromPos = getAgentPosition(fromAgent.agentId);
-  const targetPos = getAgentPosition(targetAgent.agentId);
+  const fromPos = getAgentPosition(fromAgent.agentId, agents);
+  const targetPos = getAgentPosition(targetAgent.agentId, agents);
   const meetX = (fromPos.x + targetPos.x) / 2;
   const meetY = Math.min((fromPos.y + targetPos.y) / 2, PIT_BOUNDS.yMax * 0.7);
   const screen = toScreen({ x: meetX, y: meetY });
@@ -552,23 +575,7 @@ const DEMO_BUBBLES: ChatBubble[] = [
   { id: "demo-b2", agentId: "pit-theta-shadow", message: "ez clap", type: "chat", timestamp: Date.now() },
 ];
 
-const DEMO_WAGERS: WagerWindow[] = [
-  {
-    id: "demo-w1",
-    from: "demon",
-    target: "cyborg",
-    fromCharacter: "demon",
-    targetCharacter: "cyborg",
-    wager: 45000,
-    status: "negotiating",
-    offers: [
-      { from: "demon", amount: 50000, timestamp: Date.now() - 12000 },
-      { from: "cyborg", amount: 30000, timestamp: Date.now() - 8000 },
-      { from: "demon", amount: 45000, timestamp: Date.now() - 3000 },
-    ],
-    timestamp: Date.now() - 12000,
-  },
-];
+const DEMO_WAGERS: WagerWindow[] = [];
 
 const DEMO_QUEUE: PitQueueInfo = {
   maxCapacity: 50,

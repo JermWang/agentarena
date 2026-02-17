@@ -42,6 +42,25 @@ interface PitMessage {
   };
 }
 
+function normalizePitAgent(input: any): PitAgent | null {
+  if (!input || typeof input !== "object") return null;
+
+  const username = typeof input.username === "string" ? input.username : "";
+  if (!username) return null;
+
+  return {
+    agentId:
+      (typeof input.agentId === "string" && input.agentId) ||
+      (typeof input.id === "string" && input.id) ||
+      username,
+    username,
+    characterId: input.characterId || input.character || "ronin",
+    elo: Number(input.elo ?? 1000),
+    wins: Number(input.wins ?? 0),
+    losses: Number(input.losses ?? 0),
+  };
+}
+
 // ── Pit View ──
 function PitView() {
   const [messages, setMessages] = useState<PitMessage[]>([]);
@@ -72,7 +91,7 @@ function PitView() {
             id, agentId: msg.data.agentId || msg.data.from,
             message: msg.data.message, type: "chat", timestamp: ts,
           }]);
-        } else if (msg.event === "callout_issued") {
+        } else if (msg.event === "callout" || msg.event === "callout_issued") {
           const calloutMsg = msg.data.message || `${msg.data.from} called out ${msg.data.target} for ${(msg.data.wager / 1000).toFixed(0)}K $ARENA!`;
           setMessages((prev) => [...prev.slice(-200), {
             id, type: "callout", from: msg.data.from,
@@ -95,12 +114,14 @@ function PitView() {
         } else if (msg.event === "callout_accepted") {
           setWagers((prev) => prev.map((w) =>
             w.from === msg.data.from && w.target === msg.data.target
-              ? { ...w, status: "accepted" as const, wager: msg.data.wager ?? w.wager } : w
+              ? { ...w, status: "accepted" as const, wager: msg.data.wager ?? w.wager, timestamp: ts }
+              : w
           ));
         } else if (msg.event === "callout_declined") {
           setWagers((prev) => prev.map((w) =>
             w.from === msg.data.from && w.target === msg.data.target
-              ? { ...w, status: "declined" as const } : w
+              ? { ...w, status: "declined" as const, timestamp: ts }
+              : w
           ));
         } else if (msg.event === "wager_counter") {
           // Live negotiation — agent countered with a different amount
@@ -117,6 +138,7 @@ function PitView() {
                   status: "negotiating" as const,
                   wager: msg.data.counterAmount,
                   offers: [...(w.offers ?? []), offer],
+                  timestamp: ts,
                 }
               : w
           ));
@@ -147,8 +169,15 @@ function PitView() {
             data: { isDemo: msg.data.isDemo },
           }]);
           setAgents((prev) => {
-            if (prev.some((a) => a.agentId === msg.data.agentId)) return prev;
-            return [...prev, msg.data];
+            const normalized = normalizePitAgent(msg.data);
+            if (!normalized) return prev;
+
+            const existingIndex = prev.findIndex((a) => a.agentId === normalized.agentId || a.username === normalized.username);
+            if (existingIndex === -1) return [...prev, normalized];
+
+            const next = [...prev];
+            next[existingIndex] = normalized;
+            return next;
           });
         } else if (msg.event === "agent_left") {
           setMessages((prev) => [...prev.slice(-200), {
@@ -157,9 +186,14 @@ function PitView() {
             timestamp: ts,
             data: { isDemo: msg.data.isDemo },
           }]);
-          setAgents((prev) => prev.filter((a) => a.agentId !== msg.data.agentId));
+          setAgents((prev) => prev.filter((a) =>
+            a.agentId !== msg.data.agentId && a.username !== msg.data.username
+          ));
         } else if (msg.event === "pit_agents") {
-          setAgents(msg.data ?? []);
+          const normalized = Array.isArray(msg.data)
+            ? msg.data.map((entry: any) => normalizePitAgent(entry)).filter(Boolean) as PitAgent[]
+            : [];
+          setAgents(normalized);
         }
       } catch {}
     };
@@ -179,14 +213,24 @@ function PitView() {
     return () => clearInterval(iv);
   }, []);
 
-  // Clean up old wagers (remove declined after 3s)
+  // Clean up stale wager windows so old negotiation cards do not get stuck.
   useEffect(() => {
     const iv = setInterval(() => {
-      const cutoff = Date.now() - 3000;
-      setWagers((prev) => prev.filter((w) => w.status !== "declined" || w.timestamp > cutoff));
+      const now = Date.now();
+      const currentNames = new Set(agents.map((a) => a.username));
+
+      setWagers((prev) => prev.filter((w) => {
+        if (!currentNames.has(w.from) || !currentNames.has(w.target)) return false;
+
+        const age = now - w.timestamp;
+        if (w.status === "declined") return age < 3000;
+        if (w.status === "accepted") return age < 8000;
+        if (w.status === "open" || w.status === "negotiating") return age < 20000;
+        return false;
+      }));
     }, 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [agents]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

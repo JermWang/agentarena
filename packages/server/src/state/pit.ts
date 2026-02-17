@@ -34,6 +34,7 @@ export class Pit {
   join(agent: PitAgent): void {
     this.agents.set(agent.agentId, agent);
     this.broadcastPitEvent("agent_joined", {
+      agentId: agent.agentId,
       username: agent.username,
       character: agent.characterId,
       elo: agent.elo,
@@ -45,7 +46,11 @@ export class Pit {
     const agent = this.agents.get(agentId);
     if (agent) {
       this.agents.delete(agentId);
-      this.broadcastPitEvent("agent_left", { username: agent.username, isDemo: agent.isDemo });
+      this.broadcastPitEvent("agent_left", {
+        agentId: agent.agentId,
+        username: agent.username,
+        isDemo: agent.isDemo,
+      });
     }
   }
 
@@ -138,8 +143,9 @@ export class Pit {
     return { ok: true };
   }
 
-  getAgentsList(): Array<{ username: string; character: string; elo: number; wins: number; losses: number; isDemo?: boolean }> {
+  getAgentsList(): Array<{ agentId: string; username: string; character: string; elo: number; wins: number; losses: number; isDemo?: boolean }> {
     return Array.from(this.agents.values()).map((a) => ({
+      agentId: a.agentId,
       username: a.username,
       character: a.characterId,
       elo: a.elo,

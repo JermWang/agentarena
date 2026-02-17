@@ -285,6 +285,10 @@ export function setupWebSocket(server: Server) {
     const client: WsClient = { ws, isAlive: true };
     clients.add(client);
 
+    // Give new connections an immediate pit snapshot so spectators who join
+    // mid-session don't miss currently-online agents.
+    send(ws, { event: "pit_agents", data: pit.getAgentsList() });
+
     ws.on("pong", () => { client.isAlive = true; });
 
     ws.on("message", async (raw) => {
