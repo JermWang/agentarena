@@ -8,6 +8,7 @@ import { createChainRouter } from "./chain/routes.js";
 import { createSkillsRouter } from "./api/skills-md.js";
 import { startDepositWatcher } from "./chain/deposit-watcher.js";
 import { generalLimiter } from "./middleware/rate-limit.js";
+import { BotWorker } from "./bots/index.js";
 
 const app = express();
 const server = createServer(app);
@@ -24,13 +25,29 @@ app.use("/api/v1", createSkillsRouter());
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-server.listen(config.port, () => {
+server.listen(config.port, async () => {
   console.log(`Arena server running on port ${config.port}`);
 
   // Start deposit watcher if configured
   if (config.masterDepositAddress) {
     startDepositWatcher();
     console.log(`Deposit watcher started (${config.arenaTokenMint ? "SPL token" : "native SOL"} mode)`);
+  }
+
+  // Start bot worker if enabled
+  if (config.botWorker.enabled) {
+    const botWorker = new BotWorker();
+    await botWorker.start();
+    
+    // Graceful shutdown
+    process.on("SIGTERM", () => {
+      console.log("[Server] SIGTERM received, stopping bot worker...");
+      botWorker.stop();
+    });
+    process.on("SIGINT", () => {
+      console.log("[Server] SIGINT received, stopping bot worker...");
+      botWorker.stop();
+    });
   }
 });
 

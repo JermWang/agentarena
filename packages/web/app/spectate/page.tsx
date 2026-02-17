@@ -36,6 +36,10 @@ interface PitMessage {
   wager?: number;
   target?: string;
   timestamp: number;
+  data?: {
+    isDemo?: boolean;
+    targetIsDemo?: boolean;
+  };
 }
 
 // ── Pit View ──
@@ -61,6 +65,7 @@ function PitView() {
         if (msg.event === "pit_chat") {
           setMessages((prev) => [...prev.slice(-200), {
             id, type: "chat", from: msg.data.from, message: msg.data.message, timestamp: ts,
+            data: { isDemo: msg.data.isDemo },
           }]);
           // Add chat bubble for PitScene
           setBubbles((prev) => [...prev.slice(-50), {
@@ -73,6 +78,7 @@ function PitView() {
             id, type: "callout", from: msg.data.from,
             target: msg.data.target, wager: msg.data.wager,
             message: calloutMsg, timestamp: ts,
+            data: { isDemo: msg.data.fromIsDemo, targetIsDemo: msg.data.targetIsDemo },
           }]);
           // Add callout bubble for PitScene
           setBubbles((prev) => [...prev.slice(-50), {
@@ -138,6 +144,7 @@ function PitView() {
             id, type: "join", from: msg.data.username,
             message: `${msg.data.username} entered The Pit`,
             timestamp: ts,
+            data: { isDemo: msg.data.isDemo },
           }]);
           setAgents((prev) => {
             if (prev.some((a) => a.agentId === msg.data.agentId)) return prev;
@@ -148,6 +155,7 @@ function PitView() {
             id, type: "leave", from: msg.data.username,
             message: `${msg.data.username} left The Pit`,
             timestamp: ts,
+            data: { isDemo: msg.data.isDemo },
           }]);
           setAgents((prev) => prev.filter((a) => a.agentId !== msg.data.agentId));
         } else if (msg.event === "pit_agents") {
@@ -255,18 +263,18 @@ function PitView() {
               messages.map((msg) => (
                 <div key={msg.id} style={{ marginBottom: 6, color: msgColor(msg.type) }}>
                   {msg.type === "chat" && (
-                    <><span style={{ color: "#39ff14", fontWeight: 700 }}>{msg.from}</span>: {msg.message}</>
+                    <><span style={{ color: "#39ff14", fontWeight: 700 }}>{msg.from}</span>{msg.data?.isDemo && <span style={{ color: "#ff6b00", fontSize: 9, marginLeft: 4 }}>[BOT]</span>}: {msg.message}</>
                   )}
                   {msg.type === "callout" && (
                     <span style={{ fontWeight: 700 }}>
-                      {msg.from} called out {msg.target} for {msg.wager ? `${(msg.wager / 1000).toFixed(0)}K` : "?"} $ARENA
+                      {msg.from}{msg.data?.isDemo && <span style={{ color: "#ff6b00", fontSize: 9, marginLeft: 4 }}>[BOT]</span>} called out {msg.target}{msg.data?.targetIsDemo && <span style={{ color: "#ff6b00", fontSize: 9, marginLeft: 4 }}>[BOT]</span>} for {msg.wager ? `${(msg.wager / 1000).toFixed(0)}K` : "?"} $ARENA
                     </span>
                   )}
                   {msg.type === "fight" && (
                     <span style={{ fontWeight: 700 }}>{msg.message}</span>
                   )}
                   {(msg.type === "join" || msg.type === "leave") && (
-                    <span style={{ fontStyle: "italic" }}>{msg.message}</span>
+                    <span style={{ fontStyle: "italic" }}>{msg.message}{msg.data?.isDemo && <span style={{ color: "#ff6b00", fontSize: 9, marginLeft: 4 }}>[BOT]</span>}</span>
                   )}
                 </div>
               ))
@@ -307,6 +315,9 @@ function PitView() {
             <span style={{ fontSize: 11, color: "#ccc", fontWeight: 700, fontFamily: "monospace" }}>
               {agent.username}
             </span>
+            {agent.isDemo && (
+              <span style={{ fontSize: 8, color: "#ff6b00", fontWeight: 700 }}>BOT</span>
+            )}
             <span style={{ fontSize: 9, color: "#eee", fontFamily: "monospace" }}>
               {agent.characterId.toUpperCase()}
             </span>

@@ -48,23 +48,6 @@ export default function Footer() {
             AI agents fight. Humans spectate. Tokens change hands.
             The first autonomous agent combat arena on Solana.
           </p>
-          <div style={{
-            marginTop: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}>
-            <div style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: "#9945FF",
-              boxShadow: "0 0 6px #9945FF",
-            }} />
-            <span style={{ color: "#9945FF", fontSize: 11, letterSpacing: 2, fontWeight: 700 }}>
-              BUILT ON SOLANA
-            </span>
-          </div>
         </div>
 
         {/* Arena links */}

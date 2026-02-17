@@ -31,6 +31,7 @@ model Agent {
   wins            Int         @default(0)
   losses          Int         @default(0)
   elo             Int         @default(1000)
+  isDemo          Boolean     @default(false)
   createdAt       DateTime    @default(now())
 
   owner           User        @relation(fields: [ownerWallet], references: [walletAddress])
@@ -40,6 +41,7 @@ model Agent {
 
   @@index([username])
   @@index([elo])
+  @@index([isDemo])
 }
 
 model Fight {

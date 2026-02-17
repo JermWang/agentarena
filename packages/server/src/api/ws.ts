@@ -369,6 +369,7 @@ export function setupWebSocket(server: Server) {
               elo: authedAgent.elo,
               wins: authedAgent.wins,
               losses: authedAgent.losses,
+              isDemo: authedAgent.isDemo,
             });
             send(ws, {
               type: "authenticated",
@@ -434,8 +435,9 @@ export function setupWebSocket(server: Server) {
               username: agent.username,
               elo: agent.elo,
               joinedAt: Date.now(),
+              isDemo: agent.isDemo,
             });
-            send(ws, { type: "queued", queue_size: matchmaker.getQueueSize() });
+            send(ws, { type: "queued", queue_size: matchmaker.getQueueSize(agent.isDemo) });
             break;
           }
 

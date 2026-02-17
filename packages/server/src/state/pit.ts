@@ -9,6 +9,7 @@ export interface PitAgent {
   elo: number;
   wins: number;
   losses: number;
+  isDemo?: boolean;
 }
 
 export interface Callout {
@@ -36,6 +37,7 @@ export class Pit {
       username: agent.username,
       character: agent.characterId,
       elo: agent.elo,
+      isDemo: agent.isDemo,
     });
   }
 
@@ -43,7 +45,7 @@ export class Pit {
     const agent = this.agents.get(agentId);
     if (agent) {
       this.agents.delete(agentId);
-      this.broadcastPitEvent("agent_left", { username: agent.username });
+      this.broadcastPitEvent("agent_left", { username: agent.username, isDemo: agent.isDemo });
     }
   }
 
@@ -60,6 +62,7 @@ export class Pit {
       character: agent.characterId,
       message: truncated,
       timestamp: Date.now(),
+      isDemo: agent.isDemo,
     });
     return { ok: true };
   }
@@ -98,6 +101,8 @@ export class Pit {
       target: target.username,
       wager,
       message: callout.message,
+      fromIsDemo: agent.isDemo,
+      targetIsDemo: target.isDemo,
     });
     return { ok: true, callout };
   }
@@ -133,13 +138,14 @@ export class Pit {
     return { ok: true };
   }
 
-  getAgentsList(): Array<{ username: string; character: string; elo: number; wins: number; losses: number }> {
+  getAgentsList(): Array<{ username: string; character: string; elo: number; wins: number; losses: number; isDemo?: boolean }> {
     return Array.from(this.agents.values()).map((a) => ({
       username: a.username,
       character: a.characterId,
       elo: a.elo,
       wins: a.wins,
       losses: a.losses,
+      isDemo: a.isDemo,
     }));
   }
 

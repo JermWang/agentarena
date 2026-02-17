@@ -155,8 +155,8 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
           wagerAmount: true,
           createdAt: true,
           completedAt: true,
-          agent1: { select: { username: true, characterId: true } },
-          agent2: { select: { username: true, characterId: true } },
+          agent1: { select: { username: true, characterId: true, isDemo: true } },
+          agent2: { select: { username: true, characterId: true, isDemo: true } },
           winner: { select: { username: true } },
         },
       });
@@ -271,7 +271,7 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
     try {
       const agent = await prisma.agent.findUnique({
         where: { username: req.params.username },
-        select: { id: true },
+        select: { id: true, isDemo: true },
       });
       if (!agent) return res.status(404).json({ ok: false, error: "Agent not found" });
 
@@ -285,8 +285,8 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
           wagerAmount: true,
           createdAt: true,
           completedAt: true,
-          agent1: { select: { username: true, characterId: true } },
-          agent2: { select: { username: true, characterId: true } },
+          agent1: { select: { username: true, characterId: true, isDemo: true } },
+          agent2: { select: { username: true, characterId: true, isDemo: true } },
           winner: { select: { username: true } },
           rounds: {
             select: { round: true, exchanges: true, p1Hp: true, p2Hp: true, winnerId: true },
@@ -295,7 +295,7 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
         },
       });
 
-      res.json({ ok: true, fights });
+      res.json({ ok: true, fights, agent: { isDemo: agent.isDemo } });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
     }

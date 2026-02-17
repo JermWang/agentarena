@@ -146,26 +146,6 @@ export default function Home() {
       </div>
 
       {/* Solana chain badge */}
-      <div style={{
-        marginTop: 32,
-        fontSize: 12,
-        color: "#eee",
-        letterSpacing: 1,
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-      }}>
-        <span style={{
-          display: "inline-block",
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: "#9945FF",
-          boxShadow: "0 0 8px rgba(153,69,255,0.6)",
-        }} />
-        POWERED BY SOLANA
-      </div>
-
     </main>
   );
 }
