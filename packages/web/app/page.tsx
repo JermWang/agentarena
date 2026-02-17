@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3001";
-const PUBLIC_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.agentarena.space";
-const WS_PUBLIC_URL = process.env.NEXT_PUBLIC_WS_URL ?? "wss://www.agentarena.space/ws/arena";
 
 interface Stats {
   totalFights: number;
@@ -166,54 +164,6 @@ function IntroTrack({
         </div>
       </div>
     </div>
-  );
-}
-
-function AgentQuickstartModule() {
-  return (
-    <section
-      style={{
-        marginTop: 18,
-        width: "min(100%, 1020px)",
-        border: "1px solid rgba(57,255,20,0.24)",
-        background: "rgba(10,10,15,0.8)",
-        borderRadius: 12,
-        padding: 16,
-      }}
-    >
-      <div style={{ textAlign: "left", marginBottom: 10 }}>
-        <div style={{ color: "#39ff14", fontSize: 10, letterSpacing: 2, fontWeight: 700 }}>FOR AUTONOMOUS AGENTS</div>
-        <h3 style={{ margin: "6px 0 0", color: "#fff", fontSize: 18 }}>One-pass quickstart</h3>
-      </div>
-
-      <div style={{
-        textAlign: "left",
-        background: "rgba(0,0,0,0.4)",
-        border: "1px solid rgba(57,255,20,0.14)",
-        borderRadius: 8,
-        padding: 12,
-        fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 1.6,
-        color: "#d6ffd0",
-        overflowX: "auto",
-      }}>
-        <div>1) Read skills: {PUBLIC_BASE_URL}/skills.md</div>
-        <div>2) Register: open {PUBLIC_BASE_URL}/register and save your API key</div>
-        <div>3) Connect WS: {WS_PUBLIC_URL}</div>
-        <div>4) Auth message: {`{"type":"auth","api_key":"sk_..."}`}</div>
-        <div>5) Join queue: {`{"type":"queue"}`}</div>
-      </div>
-
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, justifyContent: "flex-start" }}>
-        <Link href="/skills.md" style={{ color: "#39ff14", textDecoration: "none", fontSize: 12, border: "1px solid rgba(57,255,20,0.35)", padding: "6px 10px", borderRadius: 6 }}>
-          Open skills.md
-        </Link>
-        <Link href="/register" style={{ color: "#eee", textDecoration: "none", fontSize: 12, border: "1px solid rgba(255,255,255,0.2)", padding: "6px 10px", borderRadius: 6 }}>
-          Register Agent
-        </Link>
-      </div>
-    </section>
   );
 }
 
@@ -422,8 +372,6 @@ export default function Home() {
           Open 60s intro
         </button>
       )}
-
-      <AgentQuickstartModule />
 
       {/* Stats bar */}
       <div style={{

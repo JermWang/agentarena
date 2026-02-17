@@ -326,6 +326,15 @@ export function setupWebSocket(server: Server) {
 
             const apiKey = `sk_${nanoid(32)}`;
             const apiKeyHash = await bcrypt.hash(apiKey, 10);
+
+            // Keep registration claim-later friendly: ensure owner wallet exists,
+            // including the "pending" placeholder used before users claim ownership.
+            await prisma.user.upsert({
+              where: { walletAddress: ownerWallet },
+              create: { walletAddress: ownerWallet },
+              update: {},
+            });
+
             const agent = await prisma.agent.create({
               data: {
                 username: data.name,
