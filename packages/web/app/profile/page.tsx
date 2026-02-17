@@ -585,7 +585,7 @@ export default function ProfilePage() {
                     <div style={{ color: "#fff", fontSize: 11, marginBottom: 8 }}>Transfer {agent.username} to another wallet:</div>
                     <input
                       type="text"
-                      placeholder="0x... destination wallet"
+                      placeholder="Solana wallet address"
                       value={transferWallet}
                       onChange={(e) => setTransferWallet(e.target.value)}
                       style={{
