@@ -13,24 +13,39 @@ const WalletMultiButtonDynamic = dynamic(
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3001";
 
-interface BetPool {
-  p1: number;
-  p2: number;
+interface BetPool { p1: number; p2: number; p1Username?: string; p2Username?: string }
+
+function fmt(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toFixed(0);
 }
+
+const QUICK_BETS = [
+  { label: "50K", value: 50_000 },
+  { label: "100K", value: 100_000 },
+  { label: "250K", value: 250_000 },
+  { label: "500K", value: 500_000 },
+];
 
 export function BettingPanel({ state }: { state: FightState }) {
   const { publicKey, connected: isConnected, signMessage } = useWallet();
   const address = publicKey?.toBase58();
   const [pool, setPool] = useState<BetPool>({ p1: 0, p2: 0 });
-  const [amount, setAmount] = useState("50000");
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [amount, setAmount] = useState(50_000);
+  const [side, setSide] = useState<"p1" | "p2" | null>(null);
   const [placing, setPlacing] = useState(false);
-  const [message, setMessage] = useState("");
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const isFightOver = state.status === "fight_over";
   const totalPool = pool.p1 + pool.p2;
+  const p1Name = pool.p1Username || state.p1.agentId.slice(0, 12);
+  const p2Name = pool.p2Username || state.p2.agentId.slice(0, 12);
+  const p1Odds = totalPool > 0 && pool.p1 > 0 ? (totalPool / pool.p1).toFixed(2) + "x" : "—";
+  const p2Odds = totalPool > 0 && pool.p2 > 0 ? (totalPool / pool.p2).toFixed(2) + "x" : "—";
+  const p1Pct = totalPool > 0 ? Math.round((pool.p1 / totalPool) * 100) : 50;
+  const p2Pct = 100 - p1Pct;
 
-  // Fetch side bet pool
   useEffect(() => {
     const fetchPool = async () => {
       try {
@@ -40,257 +55,154 @@ export function BettingPanel({ state }: { state: FightState }) {
       } catch {}
     };
     fetchPool();
-    const interval = setInterval(fetchPool, 3000);
-    return () => clearInterval(interval);
+    const iv = setInterval(fetchPool, 3000);
+    return () => clearInterval(iv);
   }, [state.fightId]);
 
   const placeBet = async () => {
-    if (!address || !selectedAgent || !amount) return;
-    if (!signMessage) {
-      setMessage("Wallet does not support signing");
-      return;
-    }
+    if (!address || !side || !amount) return;
+    if (!signMessage) { setMsg({ text: "Wallet doesn't support signing", ok: false }); return; }
     setPlacing(true);
-    setMessage("");
+    setMsg(null);
+    const backedAgent = side === "p1" ? state.p1.agentId : state.p2.agentId;
     try {
-      const challengeResponse = await fetch(`${SERVER}/api/v1/arena/side-bet/challenge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fight_id: state.fightId,
-          wallet_address: address,
-          backed_agent: selectedAgent,
-          amount,
-        }),
+      const cr = await fetch(`${SERVER}/api/v1/arena/side-bet/challenge`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fight_id: state.fightId, wallet_address: address, backed_agent: backedAgent, amount: String(amount) }),
       });
-      const challengeData = await challengeResponse.json();
-      if (!challengeResponse.ok || !challengeData.ok || !challengeData.message || !challengeData.nonce) {
-        setMessage(challengeData.error || "Failed to create bet authorization");
-        setPlacing(false);
-        return;
-      }
-
-      const msgBytes = new TextEncoder().encode(challengeData.message);
-      const sigBytes = await signMessage(msgBytes);
-      const signature = bs58.encode(sigBytes);
-
+      const cd = await cr.json();
+      if (!cd.ok || !cd.message || !cd.nonce) { setMsg({ text: cd.error || "Auth failed", ok: false }); setPlacing(false); return; }
+      const sig = bs58.encode(await signMessage(new TextEncoder().encode(cd.message)));
       const r = await fetch(`${SERVER}/api/v1/arena/side-bet`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fight_id: state.fightId,
-          wallet_address: address,
-          backed_agent: selectedAgent,
-          amount,
-          nonce: challengeData.nonce,
-          signature,
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fight_id: state.fightId, wallet_address: address, backed_agent: backedAgent, amount: String(amount), nonce: cd.nonce, signature: sig }),
       });
       const data = await r.json();
-      if (data.ok) {
-        setMessage("Bet placed!");
-        setPool(data.pool);
-        setSelectedAgent(null);
-      } else {
-        setMessage(data.error || "Failed");
-      }
-    } catch {
-      setMessage("Connection error");
-    }
+      if (data.ok) { setMsg({ text: "Bet placed!", ok: true }); setPool(data.pool); setSide(null); }
+      else { setMsg({ text: data.error || "Failed", ok: false }); }
+    } catch { setMsg({ text: "Connection error", ok: false }); }
     setPlacing(false);
   };
 
-  const p1Odds = totalPool > 0 ? ((totalPool / Math.max(pool.p1, 0.01))).toFixed(1) : "—";
-  const p2Odds = totalPool > 0 ? ((totalPool / Math.max(pool.p2, 0.01))).toFixed(1) : "—";
+  const selName = side === "p1" ? p1Name : side === "p2" ? p2Name : null;
 
   return (
     <div style={{
-      position: "absolute",
-      bottom: 20,
-      right: 20,
-      width: 280,
-      background: "rgba(10, 10, 15, 0.92)",
-      border: "1px solid rgba(57, 255, 20, 0.25)",
-      padding: 16,
-      fontFamily: "monospace",
-      fontSize: 12,
-      pointerEvents: "auto",
-      zIndex: 40,
+      position: "absolute", bottom: 20, right: 20, width: 300,
+      background: "rgba(8,8,12,0.96)", border: "1px solid rgba(57,255,20,0.18)",
+      borderRadius: 10, fontFamily: "monospace", fontSize: 12,
+      pointerEvents: "auto", zIndex: 40, overflow: "hidden",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
     }}>
       {/* Header */}
       <div style={{
-        color: "#39ff14",
-        fontSize: 13,
-        fontWeight: 700,
-        letterSpacing: 2,
-        marginBottom: 12,
-        borderBottom: "1px solid rgba(57, 255, 20, 0.2)",
-        paddingBottom: 8,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+        background: "rgba(57,255,20,0.03)",
       }}>
-        SIDE BETS
+        <span style={{ color: "#39ff14", fontSize: 11, fontWeight: 700, letterSpacing: 3 }}>SIDE BETS</span>
+        <span style={{ color: "#555", fontSize: 10 }}>
+          {isFightOver ? "CLOSED" : <>LIVE<span style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#39ff14", marginLeft: 5, boxShadow: "0 0 6px #39ff14", verticalAlign: "middle" }} /></>}
+        </span>
       </div>
 
-      {/* Pool display */}
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ textAlign: "center", flex: 1 }}>
-          <div style={{ color: "#3939ff", fontSize: 11, marginBottom: 2 }}>{state.p1.agentId}</div>
-          <div style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>{pool.p1 >= 1000 ? `${(pool.p1/1000).toFixed(0)}K` : pool.p1.toFixed(0)}</div>
-          <div style={{ color: "#eee", fontSize: 10 }}>{p1Odds}x</div>
-        </div>
-        <div style={{
-          color: "#eee",
-          display: "flex",
-          alignItems: "center",
-          fontSize: 10,
-          padding: "0 8px",
-        }}>
-          $ARENA
-        </div>
-        <div style={{ textAlign: "center", flex: 1 }}>
-          <div style={{ color: "#ff3939", fontSize: 11, marginBottom: 2 }}>{state.p2.agentId}</div>
-          <div style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>{pool.p2 >= 1000 ? `${(pool.p2/1000).toFixed(0)}K` : pool.p2.toFixed(0)}</div>
-          <div style={{ color: "#eee", fontSize: 10 }}>{p2Odds}x</div>
-        </div>
-      </div>
-
-      {isFightOver ? (
-        <div style={{ color: "#eee", textAlign: "center", padding: 8 }}>
-          FIGHT OVER — BETS CLOSED
-        </div>
-      ) : !isConnected ? (
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <WalletMultiButtonDynamic
-            style={{
-              width: "100%",
-              padding: "10px 0",
-              background: "transparent",
-              border: "1px solid #39ff14",
-              color: "#39ff14",
-              fontFamily: "monospace",
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: 2,
-              cursor: "pointer",
-              justifyContent: "center",
-            }}
-          />
-        </div>
-      ) : (
-        <>
-          {/* Agent selection */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <button
-              onClick={() => setSelectedAgent(state.p1.agentId)}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                background: selectedAgent === state.p1.agentId ? "rgba(57, 57, 255, 0.3)" : "transparent",
-                border: `1px solid ${selectedAgent === state.p1.agentId ? "#3939ff" : "#333"}`,
-                color: selectedAgent === state.p1.agentId ? "#3939ff" : "#eee",
-                fontFamily: "monospace",
-                fontSize: 11,
-                cursor: "pointer",
-                fontWeight: selectedAgent === state.p1.agentId ? 700 : 400,
-              }}
-            >
-              {state.p1.agentId}
-            </button>
-            <button
-              onClick={() => setSelectedAgent(state.p2.agentId)}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                background: selectedAgent === state.p2.agentId ? "rgba(255, 57, 57, 0.3)" : "transparent",
-                border: `1px solid ${selectedAgent === state.p2.agentId ? "#ff3939" : "#333"}`,
-                color: selectedAgent === state.p2.agentId ? "#ff3939" : "#eee",
-                fontFamily: "monospace",
-                fontSize: 11,
-                cursor: "pointer",
-                fontWeight: selectedAgent === state.p2.agentId ? 700 : 400,
-              }}
-            >
-              {state.p2.agentId}
-            </button>
-          </div>
-
-          {/* Amount input */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              min="1"
-              step="1"
-              style={{
-                flex: 1,
-                padding: "8px 10px",
-                background: "rgba(0,0,0,0.5)",
-                border: "1px solid #333",
-                color: "#fff",
-                fontFamily: "monospace",
-                fontSize: 12,
-                outline: "none",
-              }}
-              placeholder="Amount"
-            />
-            {[50000, 100000, 500000].map((v) => (
-              <button
-                key={v}
-                onClick={() => setAmount(String(v))}
-                style={{
-                  padding: "8px 6px",
-                  background: amount === String(v) ? "rgba(57,255,20,0.15)" : "transparent",
-                  border: "1px solid #333",
-                  color: "#eee",
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                  cursor: "pointer",
-                }}
-              >
-                {v >= 1000 ? `${v / 1000}K` : v}
-              </button>
-            ))}
-          </div>
-
-          {/* Place bet button */}
-          <button
-            onClick={placeBet}
-            disabled={!selectedAgent || placing || !amount}
-            style={{
-              width: "100%",
-              padding: "10px 0",
-              background: selectedAgent ? "#39ff14" : "transparent",
-              border: `1px solid ${selectedAgent ? "#39ff14" : "#333"}`,
-              color: selectedAgent ? "#0a0a0f" : "#eee",
-              fontFamily: "monospace",
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: 2,
-              cursor: selectedAgent ? "pointer" : "default",
-              opacity: placing ? 0.5 : 1,
-            }}
-          >
-            {placing ? "PLACING..." : selectedAgent ? `BET ${Number(amount) >= 1000 ? `${Number(amount)/1000}K` : amount} $ARENA ON ${selectedAgent.toUpperCase()}` : "SELECT A FIGHTER"}
-          </button>
-
-          {/* Message */}
-          {message && (
-            <div style={{
-              marginTop: 6,
-              color: message === "Bet placed!" ? "#39ff14" : "#ff3939",
-              fontSize: 10,
-              textAlign: "center",
+      {/* Fighter cards */}
+      <div style={{ display: "flex", padding: "12px 12px 8px", gap: 6 }}>
+        {(["p1", "p2"] as const).map((s) => {
+          const name = s === "p1" ? p1Name : p2Name;
+          const poolAmt = s === "p1" ? pool.p1 : pool.p2;
+          const odds = s === "p1" ? p1Odds : p2Odds;
+          const pct = s === "p1" ? p1Pct : p2Pct;
+          const color = s === "p1" ? "#39b4ff" : "#ff5050";
+          const active = side === s;
+          return (
+            <div key={s} onClick={() => !isFightOver && isConnected && setSide(side === s ? null : s)} style={{
+              flex: 1, padding: "10px 6px", borderRadius: 7, textAlign: "center",
+              border: `1px solid ${active ? color + "99" : "rgba(255,255,255,0.07)"}`,
+              background: active ? color + "18" : "rgba(255,255,255,0.03)",
+              cursor: isFightOver || !isConnected ? "default" : "pointer",
+              transition: "all 0.15s",
             }}>
-              {message}
+              <div style={{ fontSize: 10, fontWeight: 700, color: active ? color : "#999", letterSpacing: 0.5, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#fff", lineHeight: 1 }}>{fmt(poolAmt)}</div>
+              <div style={{ fontSize: 9, color: "#555", marginTop: 2 }}>$ARENA</div>
+              <div style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: active ? color : "#555" }}>{odds}</div>
+              <div style={{ fontSize: 9, color: "#444" }}>{pct}%</div>
             </div>
-          )}
+          );
+        })}
+      </div>
 
-          {/* Wallet address */}
-          <div style={{ color: "#eee", fontSize: 9, textAlign: "center", marginTop: 8 }}>
-            {address?.slice(0, 4)}...{address?.slice(-4)} on Solana
+      {/* Pool bar */}
+      {totalPool > 0 && (
+        <div style={{ padding: "0 12px 10px" }}>
+          <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden", display: "flex" }}>
+            <div style={{ height: "100%", width: `${p1Pct}%`, background: "#39b4ff", transition: "width 0.5s" }} />
+            <div style={{ height: "100%", flex: 1, background: "#ff5050" }} />
           </div>
-        </>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, fontSize: 9 }}>
+            <span style={{ color: "#39b4ff" }}>{p1Pct}%</span>
+            <span style={{ color: "#444" }}>POOL {fmt(totalPool)}</span>
+            <span style={{ color: "#ff5050" }}>{p2Pct}%</span>
+          </div>
+        </div>
       )}
+
+      <div style={{ padding: "0 12px 12px" }}>
+        {isFightOver ? (
+          <div style={{ padding: "12px 0", textAlign: "center", color: "#444", fontSize: 11, letterSpacing: 2 }}>
+            FIGHT OVER — BETS CLOSED
+          </div>
+        ) : !isConnected ? (
+          <div>
+            <div style={{ color: "#444", fontSize: 10, textAlign: "center", marginBottom: 8, letterSpacing: 1 }}>CONNECT WALLET TO BET</div>
+            <WalletMultiButtonDynamic style={{ width: "100%", padding: "10px 0", background: "transparent", border: "1px solid rgba(57,255,20,0.4)", color: "#39ff14", fontFamily: "monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, cursor: "pointer", borderRadius: 6, justifyContent: "center" }} />
+          </div>
+        ) : (
+          <>
+            {/* Quick bet grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, marginBottom: 8 }}>
+              {QUICK_BETS.map((q) => (
+                <button key={q.value} onClick={() => setAmount(q.value)} style={{
+                  padding: "7px 0", borderRadius: 5, fontSize: 10, fontFamily: "monospace",
+                  background: amount === q.value ? "rgba(57,255,20,0.12)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${amount === q.value ? "rgba(57,255,20,0.4)" : "rgba(255,255,255,0.07)"}`,
+                  color: amount === q.value ? "#39ff14" : "#777", fontWeight: amount === q.value ? 700 : 400,
+                  cursor: "pointer", transition: "all 0.1s",
+                }}>{q.label}</button>
+              ))}
+            </div>
+
+            {/* Custom amount */}
+            <div style={{ position: "relative", marginBottom: 8 }}>
+              <input type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} min="1" style={{
+                width: "100%", padding: "8px 50px 8px 10px", background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, color: "#fff",
+                fontFamily: "monospace", fontSize: 12, outline: "none", boxSizing: "border-box",
+              }} />
+              <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#444", fontSize: 10, pointerEvents: "none" }}>$ARENA</span>
+            </div>
+
+            {/* CTA */}
+            <button onClick={placeBet} disabled={!side || placing} style={{
+              width: "100%", padding: "10px 0", borderRadius: 6, fontFamily: "monospace",
+              fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: side && !placing ? "pointer" : "default",
+              transition: "all 0.15s", opacity: placing ? 0.6 : 1,
+              background: side === "p1" ? "rgba(57,180,255,0.15)" : side === "p2" ? "rgba(255,80,80,0.15)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${side === "p1" ? "#39b4ff55" : side === "p2" ? "#ff505055" : "rgba(255,255,255,0.07)"}`,
+              color: side === "p1" ? "#39b4ff" : side === "p2" ? "#ff5050" : "#444",
+            }}>
+              {placing ? "PLACING..." : side ? `BET ${fmt(amount)} ON ${selName?.toUpperCase()}` : "SELECT A FIGHTER"}
+            </button>
+
+            {/* Feedback */}
+            {msg && (
+              <div style={{ marginTop: 6, fontSize: 10, textAlign: "center", color: msg.ok ? "#39ff14" : "#ff3939" }}>{msg.text}</div>
+            )}
+            <div style={{ color: "#333", fontSize: 9, textAlign: "center", marginTop: 6 }}>{address?.slice(0, 4)}...{address?.slice(-4)}</div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

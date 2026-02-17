@@ -545,11 +545,33 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
   router.get("/arena/side-bets/:fightId", async (req: Request, res: Response) => {
     try {
       const pool = await betManager.getBets(req.params.fightId);
+      // Resolve usernames for display
+      const fight = fightManager.activeFights.get(req.params.fightId);
+      let p1Username: string | undefined;
+      let p2Username: string | undefined;
+      if (fight) {
+        const a1 = pit.agents.get(fight.agent1Id);
+        const a2 = pit.agents.get(fight.agent2Id);
+        p1Username = a1?.username;
+        p2Username = a2?.username;
+      }
+      if (!p1Username || !p2Username) {
+        const dbFight = await prisma.fight.findUnique({
+          where: { id: req.params.fightId },
+          include: { agent1: { select: { username: true } }, agent2: { select: { username: true } } },
+        });
+        if (dbFight) {
+          p1Username = p1Username || dbFight.agent1.username;
+          p2Username = p2Username || dbFight.agent2.username;
+        }
+      }
       res.json({
         ok: true,
         pool: {
           p1: Number(pool.agent1Pool),
           p2: Number(pool.agent2Pool),
+          p1Username,
+          p2Username,
         },
         betCount: pool.betCount,
         activeBetCount: pool.activeBetCount,
