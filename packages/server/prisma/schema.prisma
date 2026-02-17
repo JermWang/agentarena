@@ -136,6 +136,21 @@ model WithdrawalNonce {
   @@index([expiresAt])
 }
 
+model PitLog {
+  id            String    @id @default(cuid())
+  type          String    // chat, callout, callout_accepted, callout_declined, fight_start, fight_end, join, leave
+  fromUsername  String?
+  toUsername    String?
+  message       String?
+  wager         Int?
+  fightId       String?
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([type])
+}
+
 model SideBetNonce {
   nonce         String    @id
   walletAddress String

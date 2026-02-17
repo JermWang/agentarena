@@ -559,6 +559,33 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
     }
   });
 
+  // --- Pit History: recent chat/callout/fight log from DB ---
+  router.get("/pit/history", async (_req: Request, res: Response) => {
+    try {
+      const logs = await prisma.pitLog.findMany({
+        where: {
+          type: { in: ["chat", "callout", "callout_accepted", "callout_declined", "fight_start", "fight_end"] },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        select: {
+          id: true,
+          type: true,
+          fromUsername: true,
+          toUsername: true,
+          message: true,
+          wager: true,
+          fightId: true,
+          createdAt: true,
+        },
+      });
+      // Return oldest-first for the client to render chronologically
+      res.json({ ok: true, logs: logs.reverse() });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   // --- Admin: reset all data (protected by ADMIN_SECRET env var) ---
   router.post("/admin/reset", async (req: Request, res: Response) => {
     const secret = process.env.ADMIN_SECRET;
@@ -567,6 +594,7 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
     }
     try {
       // Delete in FK-safe order
+      await prisma.pitLog.deleteMany();
       await prisma.sideBetNonce.deleteMany();
       await prisma.bet.deleteMany();
       await prisma.treasuryEntry.deleteMany();

@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type { WebSocket } from "ws";
+import { prisma } from "../db/client.js";
 
 export interface PitAgent {
   ws: WebSocket;
@@ -40,6 +41,7 @@ export class Pit {
       elo: agent.elo,
       isDemo: agent.isDemo,
     });
+    this.logToDb("join", { from: agent.username, message: `${agent.username} entered The Pit` });
   }
 
   leave(agentId: string): void {
@@ -51,6 +53,7 @@ export class Pit {
         username: agent.username,
         isDemo: agent.isDemo,
       });
+      this.logToDb("leave", { from: agent.username, message: `${agent.username} left The Pit` });
     }
   }
 
@@ -69,6 +72,7 @@ export class Pit {
       timestamp: Date.now(),
       isDemo: agent.isDemo,
     });
+    this.logToDb("chat", { from: agent.username, message: truncated });
     return { ok: true };
   }
 
@@ -113,6 +117,7 @@ export class Pit {
       fromIsDemo: agent.isDemo,
       targetIsDemo: target.isDemo,
     });
+    this.logToDb("callout", { from: agent.username, to: target.username, wager, message: callout.message });
     return { ok: true, callout };
   }
 
@@ -131,6 +136,7 @@ export class Pit {
       target: callout.targetUsername,
       wager: callout.wager,
     });
+    this.logToDb("callout_accepted", { from: callout.fromUsername, to: callout.targetUsername, wager: callout.wager });
     return { ok: true, callout };
   }
 
@@ -144,6 +150,7 @@ export class Pit {
       from: callout.fromUsername,
       target: callout.targetUsername,
     });
+    this.logToDb("callout_declined", { from: callout.fromUsername, to: callout.targetUsername });
     return { ok: true };
   }
 
@@ -176,6 +183,20 @@ export class Pit {
 
   private broadcastPitEvent(event: string, data: unknown): void {
     this.broadcastToPit({ type: "pit_event", event, data });
+  }
+
+  private logToDb(type: string, opts: { from?: string; to?: string; message?: string; wager?: number; fightId?: string; metadata?: any }): void {
+    prisma.pitLog.create({
+      data: {
+        type,
+        fromUsername: opts.from,
+        toUsername: opts.to,
+        message: opts.message?.slice(0, 500),
+        wager: opts.wager,
+        fightId: opts.fightId,
+        metadata: opts.metadata,
+      },
+    }).catch((e) => console.error("[PitLog] write failed:", e));
   }
 
   cleanExpired(): void {

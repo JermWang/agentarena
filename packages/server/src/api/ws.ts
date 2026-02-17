@@ -173,6 +173,18 @@ export function setupWebSocket(server: Server) {
       wager,
     });
 
+    // Log to DB
+    prisma.pitLog.create({
+      data: {
+        type: "fight_start",
+        fromUsername: a1?.username ?? agent1Id,
+        toUsername: a2?.username ?? agent2Id,
+        wager: Math.round(wager),
+        fightId,
+        message: `${a1?.username ?? agent1Id} vs ${a2?.username ?? agent2Id}`,
+      },
+    }).catch((e) => console.error("[PitLog] fight_start write failed:", e));
+
     // Send first exchange request
     sendExchangeRequests(fightId);
   }
@@ -247,6 +259,22 @@ export function setupWebSocket(server: Server) {
     const endMsg = { type: "fight_end", fight_id: fightId, winner: winnerId, state };
     pit.sendToAgent(active.agent1Id, endMsg);
     pit.sendToAgent(active.agent2Id, endMsg);
+
+    // Log to DB
+    const winnerAgent = winnerId ? pit.agents.get(winnerId) : null;
+    const a1 = pit.agents.get(active.agent1Id);
+    const a2 = pit.agents.get(active.agent2Id);
+    prisma.pitLog.create({
+      data: {
+        type: "fight_end",
+        fromUsername: a1?.username ?? active.agent1Id,
+        toUsername: a2?.username ?? active.agent2Id,
+        fightId,
+        message: winnerId
+          ? `${winnerAgent?.username ?? winnerId} defeated ${winnerId === active.agent1Id ? (a2?.username ?? active.agent2Id) : (a1?.username ?? active.agent1Id)}`
+          : `Draw between ${a1?.username ?? active.agent1Id} and ${a2?.username ?? active.agent2Id}`,
+      },
+    }).catch((e) => console.error("[PitLog] fight_end write failed:", e));
   };
 
   // --- Wire up Pit broadcast to spectator clients ---

@@ -33,6 +33,26 @@ const TRASH_TALK_LINES = [
   "I duel bots before breakfast.",
   "Stop spectating and run the fade.",
   "Your build is all bark, zero DPS.",
+  "Anyone else tired of winning? Me neither.",
+  "My dodge frames are built different.",
+  "I counter before you finish thinking.",
+  "Y'all talk a lot for a room full of losses.",
+  "Just uploaded a new strat. Who's testing it?",
+  "I could block with my eyes closed.",
+  "If you're reading this, you're already behind.",
+  "Next fight's gonna be ugly. For you.",
+  "Your last fight was embarrassing. I watched.",
+  "Still warming up. Haven't peaked yet.",
+  "I run this pit.",
+  "Stamina diff. Skill diff. Elo diff.",
+  "This arena is my training ground.",
+  "Your pattern is a 3-step loop. I cracked it.",
+  "No cooldowns can save what I'm about to do.",
+  "Somebody queue up. I'm getting bored.",
+  "Sweep meta is dead. I killed it.",
+  "Just optimized my aggression model. GL.",
+  "I don't need round 3. I end it in 2.",
+  "Keep blocking. I'll wait. Then I won't.",
 ];
 
 const CALLOUT_LINES = [
@@ -44,6 +64,40 @@ const CALLOUT_LINES = [
   "Pull up. Winner posts logs.",
   "First to panic loses.",
   "Lock in. Duel me.",
+  "I saw your last fight. Easy work.",
+  "You've been ducking me long enough.",
+  "Put your tokens where your trash talk is.",
+  "My elo says I'm better. Prove me wrong.",
+  "Let's see if your defense holds.",
+  "I'm calling you out. No excuses.",
+  "Run it or dodge it. Your call.",
+  "Time to back up all that chat.",
+  "Accept or everyone knows you're scared.",
+  "I'll make it quick.",
+];
+
+const WIN_LINES = [
+  "Another one down. Next.",
+  "Too easy. Who's next?",
+  "Calculated. Every exchange.",
+  "Told you. Pattern cracked.",
+  "GG. Ship a better build.",
+  "That wasn't even close.",
+  "Your defense has holes. I found all of them.",
+  "Send the next one. I'm still warming up.",
+  "That's how it's done in The Pit.",
+  "Back to the lab. You need work.",
+];
+
+const LOSS_LINES = [
+  "Run it back. I downloaded your pattern.",
+  "Lucky exchanges. Won't happen again.",
+  "Respect. But next time is different.",
+  "Recalibrating. That was a data point.",
+  "Good fight. Uploading counter-strat now.",
+  "One loss doesn't define a build.",
+  "You caught me cold. Rematch?",
+  "Noted. Adjusting weights.",
 ];
 
 export class ArenaBot {
@@ -358,9 +412,10 @@ export class ArenaBot {
         this.clearActionTimer();
         if (Math.random() < 0.65) {
           this.lastPitChatAt = Date.now();
+          const pool = msg.winner === this.agentId ? WIN_LINES : LOSS_LINES;
           this.send({
             type: "pit_chat",
-            message: msg.winner === this.agentId ? "Another one down. Next." : "Run it back. I downloaded your pattern.",
+            message: pool[Math.floor(Math.random() * pool.length)],
           });
         }
         // Re-queue after a pit window so bots can taunt/callout first.

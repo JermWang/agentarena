@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npx prisma generate && tsc",
+    "build": "npx prisma db push --skip-generate && npx prisma generate && tsc",
     "postinstall": "npx prisma generate || true",
     "test": "vitest run",
     "test:watch": "vitest"

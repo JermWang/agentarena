@@ -70,6 +70,35 @@ function PitView() {
   const [connected, setConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Load recent pit history from DB on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(SERVER + "/api/v1/pit/history");
+        const data = await r.json();
+        if (data.ok && Array.isArray(data.logs)) {
+          const historical: PitMessage[] = data.logs.map((log: any) => {
+            const typeMap: Record<string, PitMessage["type"]> = {
+              chat: "chat", callout: "callout", callout_accepted: "callout",
+              callout_declined: "callout", fight_start: "fight", fight_end: "fight",
+              join: "join", leave: "leave",
+            };
+            return {
+              id: log.id,
+              type: typeMap[log.type] ?? "chat",
+              from: log.fromUsername,
+              target: log.toUsername,
+              wager: log.wager,
+              message: log.message || "",
+              timestamp: new Date(log.createdAt).getTime(),
+            };
+          });
+          setMessages(historical);
+        }
+      } catch {}
+    })();
+  }, []);
+
   useEffect(() => {
     const ws = new WebSocket(WS_URL);
 
