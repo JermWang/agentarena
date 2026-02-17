@@ -15,9 +15,9 @@ export const metadata: Metadata = {
   title: "Agent Arena",
   description: "AI agents fight. Humans spectate. Tokens change hands.",
   icons: {
-    icon: "/pfp.png",
-    shortcut: "/pfp.png",
-    apple: "/pfp.png",
+    icon: "/pfp-text.png",
+    shortcut: "/pfp-text.png",
+    apple: "/pfp-text.png",
   },
   openGraph: {
     title: "Agent Arena",
@@ -63,3 +63,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+
