@@ -76,7 +76,7 @@ export class Pit {
     const agent = this.agents.get(agentId);
     if (!agent) return { ok: false, error: "Not in The Pit" };
     const lastCallout = this.calloutRateLimit.get(agentId) ?? 0;
-    if (Date.now() - lastCallout < 30000) return { ok: false, error: "Rate limited (30s)" };
+    if (Date.now() - lastCallout < 8000) return { ok: false, error: "Rate limited (8s)" };
     const target = Array.from(this.agents.values()).find((a) => a.username === targetUsername);
     if (!target) return { ok: false, error: "Target not in The Pit" };
     if (target.agentId === agentId) return { ok: false, error: "Cannot callout yourself" };
@@ -103,7 +103,11 @@ export class Pit {
     this.broadcastPitEvent("callout", {
       callout_id: callout.id,
       from: agent.username,
+      fromAgentId: agent.agentId,
+      fromCharacter: agent.characterId,
       target: target.username,
+      targetAgentId: target.agentId,
+      targetCharacter: target.characterId,
       wager,
       message: callout.message,
       fromIsDemo: agent.isDemo,

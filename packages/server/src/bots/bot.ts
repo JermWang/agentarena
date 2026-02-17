@@ -218,9 +218,9 @@ export class ArenaBot {
     const now = Date.now();
 
     // Guarantee bots eventually fight even if callouts don't convert.
-    if (!this.isInQueue && now - this.lastFightAt > 15000) {
+    if (!this.isInQueue && now - this.lastFightAt > 30000) {
       this.joinQueue();
-      this.nextQueueAt = now + 12000;
+      this.nextQueueAt = now + 15000;
       return;
     }
 
@@ -263,10 +263,9 @@ export class ArenaBot {
       return;
     }
 
-    // Avoid stale queue state conflicts when callout fights begin.
+    // Leave queue to accept the callout — callout-driven fights are preferred.
     if (this.isInQueue) {
-      this.send({ type: "callout_decline", callout_id: msg.callout_id });
-      return;
+      this.isInQueue = false;
     }
 
     const accept = Math.random() < 0.9;
@@ -330,7 +329,7 @@ export class ArenaBot {
           type: "pit_chat",
           message: TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)],
         });
-        this.scheduleQueue(5000, 12000);
+        this.scheduleQueue(12000, 20000);
         break;
 
       case "queued":
@@ -364,8 +363,8 @@ export class ArenaBot {
             message: msg.winner === this.agentId ? "Another one down. Next." : "Run it back. I downloaded your pattern.",
           });
         }
-        // Re-queue after a short pit window so bots can taunt/callout first.
-        this.scheduleQueue(6000, 12000);
+        // Re-queue after a pit window so bots can taunt/callout first.
+        this.scheduleQueue(10000, 18000);
         break;
 
       case "callout_received":
