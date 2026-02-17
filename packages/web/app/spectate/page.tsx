@@ -390,7 +390,14 @@ function FightsView() {
       try {
         const r = await fetch(SERVER + "/api/v1/arena/fights");
         const data = await r.json();
-        if (data.ok) setFights(data.fights);
+        if (data.ok) setFights(data.fights.map((f: any) => ({
+          fightId: f.fightId,
+          agents: [f.agent1 ?? f.agents?.[0] ?? "?", f.agent2 ?? f.agents?.[1] ?? "?"],
+          round: f.round,
+          p1Hp: f.p1Hp,
+          p2Hp: f.p2Hp,
+          wager: f.wager,
+        })));
       } catch {
         // Server not running yet
       } finally {
