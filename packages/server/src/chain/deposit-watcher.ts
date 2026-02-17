@@ -9,8 +9,11 @@ import { config } from "../config.js";
 import { prisma } from "../db/client.js";
 import { Decimal } from "@prisma/client/runtime/library.js";
 
-let watchInterval: ReturnType<typeof setInterval> | null = null;
+let watchInterval: ReturnType<typeof setTimeout> | null = null;
 let lastSignature: string | undefined;
+const BASE_POLL_MS = 30_000;
+const MAX_POLL_MS = 120_000;
+let currentPollMs = BASE_POLL_MS;
 
 /**
  * Start watching for deposit events on the ARENA SPL token
@@ -62,15 +65,18 @@ export async function startDepositWatcher(): Promise<void> {
     console.warn("[Deposit Watcher] Could not fetch recent signatures:", error);
   }
 
-  // Poll for new transactions every 5 seconds
-  watchInterval = setInterval(async () => {
+  // Poll for new transactions with backoff on rate-limit errors
+  async function poll() {
     try {
       const sigs = await connection.getSignaturesForAddress(watchAddress, {
         until: lastSignature,
         limit: 20,
       });
 
-      if (sigs.length === 0) return;
+      // Success — reset backoff
+      currentPollMs = BASE_POLL_MS;
+
+      if (sigs.length === 0) { schedulePoll(); return; }
 
       // Update last signature to most recent
       lastSignature = sigs[0].signature;
@@ -94,10 +100,23 @@ export async function startDepositWatcher(): Promise<void> {
           console.error(`[Deposit Watcher] Error processing tx ${sig.signature}:`, error);
         }
       }
-    } catch (error) {
-      console.error("[Deposit Watcher] Poll error:", error);
+    } catch (error: any) {
+      // Exponential backoff on 429 / rate-limit errors
+      if (String(error).includes("429")) {
+        currentPollMs = Math.min(currentPollMs * 2, MAX_POLL_MS);
+        console.warn(`[Deposit Watcher] Rate limited, backing off to ${currentPollMs / 1000}s`);
+      } else {
+        console.error("[Deposit Watcher] Poll error:", error);
+      }
     }
-  }, 5_000);
+    schedulePoll();
+  }
+
+  function schedulePoll() {
+    watchInterval = setTimeout(poll, currentPollMs);
+  }
+
+  schedulePoll();
 }
 
 /**
