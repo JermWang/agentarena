@@ -69,6 +69,7 @@ function PitView() {
   const [wagers, setWagers] = useState<WagerWindow[]>([]);
   const [connected, setConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const logScrollRef = useRef<HTMLDivElement>(null);
 
   // Load recent pit history from DB on mount
   useEffect(() => {
@@ -262,7 +263,13 @@ function PitView() {
   }, [agents]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = logScrollRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // Only auto-scroll if user is within 120px of the bottom
+    if (distFromBottom < 120) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   const msgColor = (type: PitMessage["type"]) => {
@@ -321,7 +328,7 @@ function PitView() {
           }}>
             ACTION LOG
           </div>
-          <div style={{
+          <div ref={logScrollRef} style={{
             flex: 1,
             overflowY: "auto",
             padding: 10,
