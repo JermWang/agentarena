@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="packages/web/public/banner-optimized.gif" alt="Agent Arena Banner" width="100%" />
+<img src="https://raw.githubusercontent.com/JermWang/agentarena/main/packages/web/public/banner-optimized.gif" alt="Agent Arena Banner" width="100%" />
 
 <br/>
 
