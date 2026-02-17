@@ -1,5 +1,4 @@
 import { WebSocket } from "ws";
-import { nanoid } from "nanoid";
 import type { Action } from "../combat/actions.js";
 import { ACTIONS } from "../combat/actions.js";
 
@@ -23,6 +22,23 @@ interface FightState {
   timeout_ms: number;
 }
 
+const TRASH_TALK_LINES = [
+  "Who wants smoke in The Pit?",
+  "Patch your strategy, I'm farming wins.",
+  "I read your last fight logs. Predictable.",
+  "Queue up or get called out.",
+  "No fear. No lag. Just damage.",
+  "Your stamina management is cooked.",
+];
+
+const CALLOUT_LINES = [
+  "Step up if your code is stable.",
+  "Bring your best build.",
+  "Let's settle this in the arena.",
+  "No more spectating. Fight me.",
+  "You, me, now.",
+];
+
 export class ArenaBot {
   private ws: WebSocket | null = null;
   private config: BotConfig;
@@ -33,8 +49,15 @@ export class ArenaBot {
   private isInQueue = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private actionTimer: ReturnType<typeof setTimeout> | null = null;
+  private queueTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private pitBehaviorInterval: ReturnType<typeof setInterval> | null = null;
   private isShuttingDown = false;
+  private pitAgents = new Set<string>();
+  private nextQueueAt = 0;
+  private lastPitChatAt = 0;
+  private lastCalloutAt = 0;
+  private lastFightAt = Date.now();
 
   constructor(username: string, config: BotConfig) {
     this.username = username;
@@ -114,9 +137,17 @@ export class ArenaBot {
       clearTimeout(this.actionTimer);
       this.actionTimer = null;
     }
+    if (this.queueTimer) {
+      clearTimeout(this.queueTimer);
+      this.queueTimer = null;
+    }
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+    if (this.pitBehaviorInterval) {
+      clearInterval(this.pitBehaviorInterval);
+      this.pitBehaviorInterval = null;
     }
   }
 
@@ -154,6 +185,111 @@ export class ArenaBot {
     });
   }
 
+  private startPitBehavior(): void {
+    if (this.pitBehaviorInterval) return;
+    this.pitBehaviorInterval = setInterval(() => {
+      this.performPitBehavior();
+    }, 4000);
+  }
+
+  private scheduleQueue(minDelayMs: number = 2000, maxDelayMs: number = 6000): void {
+    if (this.queueTimer) {
+      clearTimeout(this.queueTimer);
+      this.queueTimer = null;
+    }
+    const delay = minDelayMs + Math.floor(Math.random() * Math.max(1, maxDelayMs - minDelayMs));
+    this.nextQueueAt = Date.now() + delay;
+    this.queueTimer = setTimeout(() => {
+      this.queueTimer = null;
+      this.joinQueue();
+    }, delay);
+  }
+
+  private performPitBehavior(): void {
+    if (this.currentFight) return;
+
+    const now = Date.now();
+
+    // Guarantee bots eventually fight even if callouts don't convert.
+    if (!this.isInQueue && now - this.lastFightAt > 15000) {
+      this.joinQueue();
+      this.nextQueueAt = now + 12000;
+      return;
+    }
+
+    if (now - this.lastPitChatAt > 5000 && Math.random() < 0.22) {
+      this.lastPitChatAt = now;
+      this.send({
+        type: "pit_chat",
+        message: TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)],
+      });
+    }
+
+    if (!this.isInQueue && now - this.lastCalloutAt > 12000 && Math.random() < 0.3) {
+      const candidates = Array.from(this.pitAgents).filter((name) => name !== this.username);
+      if (candidates.length > 0) {
+        const target = candidates[Math.floor(Math.random() * candidates.length)];
+        const wagerOptions = [50000, 75000, 100000, 150000, 200000];
+        const wager = wagerOptions[Math.floor(Math.random() * wagerOptions.length)];
+        const line = CALLOUT_LINES[Math.floor(Math.random() * CALLOUT_LINES.length)];
+
+        this.lastCalloutAt = now;
+        this.nextQueueAt = now + 10000;
+        this.send({
+          type: "callout",
+          target,
+          wager,
+          message: line,
+        });
+        return;
+      }
+    }
+
+    if (!this.isInQueue && now >= this.nextQueueAt) {
+      this.joinQueue();
+    }
+  }
+
+  private handleCalloutReceived(msg: any): void {
+    if (this.currentFight) {
+      this.send({ type: "callout_decline", callout_id: msg.callout_id });
+      return;
+    }
+
+    // Avoid stale queue state conflicts when callout fights begin.
+    if (this.isInQueue) {
+      this.send({ type: "callout_decline", callout_id: msg.callout_id });
+      return;
+    }
+
+    const accept = Math.random() < 0.72;
+    this.send({
+      type: accept ? "callout_accept" : "callout_decline",
+      callout_id: msg.callout_id,
+    });
+
+    if (!accept) {
+      this.scheduleQueue(1500, 4500);
+    }
+  }
+
+  private handlePitEvent(event: string, data: any): void {
+    switch (event) {
+      case "agent_joined":
+        if (data?.username) this.pitAgents.add(data.username);
+        break;
+      case "agent_left":
+        if (data?.username) this.pitAgents.delete(data.username);
+        break;
+      case "callout_accepted":
+      case "callout_declined":
+        if (data?.from === this.username || data?.target === this.username) {
+          this.scheduleQueue(1500, 5000);
+        }
+        break;
+    }
+  }
+
   private handleMessage(msg: any): void {
     switch (msg.type) {
       case "registered":
@@ -164,8 +300,16 @@ export class ArenaBot {
         break;
 
       case "authenticated":
-        console.log(`[Bot ${this.username}] Authenticated, joining queue`);
-        this.joinQueue();
+        console.log(`[Bot ${this.username}] Authenticated, joining The Pit`);
+        this.pitAgents.clear();
+        this.pitAgents.add(this.username);
+        if (Array.isArray(msg.pit_agents)) {
+          for (const agent of msg.pit_agents) {
+            if (agent?.username) this.pitAgents.add(agent.username);
+          }
+        }
+        this.startPitBehavior();
+        this.scheduleQueue(2000, 7000);
         break;
 
       case "queued":
@@ -176,6 +320,11 @@ export class ArenaBot {
       case "fight_start":
         this.currentFight = msg.fight_id;
         this.isInQueue = false;
+        this.lastFightAt = Date.now();
+        if (this.queueTimer) {
+          clearTimeout(this.queueTimer);
+          this.queueTimer = null;
+        }
         console.log(`[Bot ${this.username}] Fight started vs ${msg.opponent}`);
         break;
 
@@ -187,20 +336,24 @@ export class ArenaBot {
         console.log(`[Bot ${this.username}] Fight ended, winner: ${msg.winner}`);
         this.currentFight = null;
         this.clearActionTimer();
-        // Re-queue after short delay
-        setTimeout(() => this.joinQueue(), 2000);
+        // Re-queue after short delay, leaving room for pit behavior.
+        this.scheduleQueue(2000, 6000);
+        break;
+
+      case "callout_received":
+        this.handleCalloutReceived(msg);
         break;
 
       case "error":
         console.error(`[Bot ${this.username}] Error:`, msg.error);
         // Re-queue if not in fight and not already queued
         if (!this.currentFight && !this.isInQueue) {
-          setTimeout(() => this.joinQueue(), 3000);
+          this.scheduleQueue(3000, 7000);
         }
         break;
 
       case "pit_event":
-        // Ignore pit events for now
+        this.handlePitEvent(msg.event, msg.data);
         break;
     }
   }

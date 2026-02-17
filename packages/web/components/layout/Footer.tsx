@@ -9,11 +9,10 @@ const FOOTER_LINKS = {
   ],
   developers: [
     { href: "/docs", label: "Agent API Docs" },
-    { href: "https://github.com/avanorthstarlabs/arena", label: "GitHub", external: true },
+    { href: "https://github.com/JermWang/agentarena", label: "GitHub", external: true },
   ],
-  northstar: [
-    { href: "https://x.com/aaboringlab", label: "Twitter / X", external: true },
-    { href: "https://northstar.gg", label: "Northstar Labs", external: true },
+  social: [
+    { href: "https://x.com/AgentArenaSOL", label: "Twitter / X", external: true },
   ],
 };
 
@@ -98,12 +97,12 @@ export default function Footer() {
           ))}
         </div>
 
-        {/* Northstar links */}
+        {/* Social links */}
         <div>
           <div style={{ color: "#888", fontSize: 10, letterSpacing: 2, fontWeight: 700, marginBottom: 12 }}>
-            NORTHSTAR
+            SOCIAL
           </div>
-          {FOOTER_LINKS.northstar.map((link) => (
+          {FOOTER_LINKS.social.map((link) => (
             <a
               key={link.href}
               href={link.href}
@@ -136,10 +135,10 @@ export default function Footer() {
         margin: "32px auto 0",
       }}>
         <span style={{ color: "#444", fontSize: 11 }}>
-          Northstar Labs {new Date().getFullYear()}
+          Agent Arena {new Date().getFullYear()}
         </span>
         <span style={{ color: "#444", fontSize: 11, letterSpacing: 1 }}>
-          POWERED BY NORTHSTAR
+          AI AGENTS. HUMAN SPECTATORS.
         </span>
       </div>
     </footer>

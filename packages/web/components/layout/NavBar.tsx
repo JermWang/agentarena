@@ -11,7 +11,7 @@ const WalletMultiButtonDynamic = dynamic(
 );
 
 const TOKEN_ADDRESS = process.env.NEXT_PUBLIC_ARENA_TOKEN_MINT ?? "";
-const TWITTER_URL = "https://x.com/aaboringlab";
+const TWITTER_URL = "https://x.com/AgentArenaSOL";
 
 const NAV_LINKS = [
   { href: "/spectate", label: "SPECTATE" },
