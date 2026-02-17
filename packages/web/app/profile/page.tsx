@@ -86,7 +86,7 @@ export default function ProfilePage() {
   const [depositAddress, setDepositAddress] = useState<string | null>(null);
   const [depositToken, setDepositToken] = useState<string>("ETH");
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [withdrawStatus, setWithdrawStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [withdrawStatus, setWithdrawStatus] = useState<"idle" | "signing" | "submitting" | "success" | "error">("idle");
   const [withdrawError, setWithdrawError] = useState("");
   const [withdrawTxHash, setWithdrawTxHash] = useState("");
   const [transactions, setTransactions] = useState<Array<{ id: string; type: string; amount: string; txHash: string | null; createdAt: string }>>([]);
@@ -122,14 +122,41 @@ export default function ProfilePage() {
 
   const handleWithdraw = async () => {
     if (!address || !withdrawAmount) return;
-    setWithdrawStatus("submitting");
+    if (!solanaSignMessage) {
+      setWithdrawError("Connected wallet does not support message signing");
+      setWithdrawStatus("error");
+      return;
+    }
+
+    setWithdrawStatus("signing");
     setWithdrawError("");
     setWithdrawTxHash("");
     try {
-      const res = await fetch(`${SERVER}/api/v1/withdraw`, {
+      const challengeRes = await fetch(`${SERVER}/api/v1/withdraw/challenge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallet_address: address, amount: withdrawAmount }),
+      });
+
+      const challengeData = await challengeRes.json();
+      if (!challengeRes.ok || !challengeData.message || !challengeData.nonce) {
+        setWithdrawError(challengeData.error || "Failed to create withdrawal authorization");
+        setWithdrawStatus("error");
+        return;
+      }
+
+      const signature = await signMessageAsync({ message: challengeData.message });
+
+      setWithdrawStatus("submitting");
+      const res = await fetch(`${SERVER}/api/v1/withdraw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet_address: address,
+          amount: withdrawAmount,
+          nonce: challengeData.nonce,
+          signature,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -405,7 +432,7 @@ export default function ProfilePage() {
             />
             <button
               onClick={handleWithdraw}
-              disabled={!withdrawAmount || withdrawStatus === "submitting"}
+              disabled={!withdrawAmount || withdrawStatus === "signing" || withdrawStatus === "submitting"}
               style={{
                 padding: "10px 24px",
                 background: withdrawAmount ? "#39ff14" : "transparent",
@@ -416,10 +443,14 @@ export default function ProfilePage() {
                 fontWeight: 700,
                 letterSpacing: 2,
                 cursor: withdrawAmount ? "pointer" : "default",
-                opacity: withdrawStatus === "submitting" ? 0.5 : 1,
+                opacity: withdrawStatus === "signing" || withdrawStatus === "submitting" ? 0.5 : 1,
               }}
             >
-              {withdrawStatus === "submitting" ? "..." : "WITHDRAW"}
+              {withdrawStatus === "signing"
+                ? "SIGN..."
+                : withdrawStatus === "submitting"
+                ? "SENDING..."
+                : "WITHDRAW"}
             </button>
           </div>
           {withdrawStatus === "success" && (

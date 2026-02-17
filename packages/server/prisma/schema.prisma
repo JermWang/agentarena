@@ -120,3 +120,16 @@ model TreasuryEntry {
 
   fight           Fight?    @relation(fields: [fightId], references: [id])
 }
+
+model WithdrawalNonce {
+  nonce         String    @id
+  walletAddress String
+  amount        Decimal   @db.Decimal(36, 18)
+  message       String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([walletAddress, createdAt])
+  @@index([expiresAt])
+}

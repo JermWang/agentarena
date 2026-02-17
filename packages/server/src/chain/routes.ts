@@ -5,6 +5,40 @@ import { config } from "../config.js";
 import { z } from "zod";
 import { withdrawLimiter } from "../middleware/rate-limit.js";
 import { isValidSolanaAddress } from "./abi.js";
+import { PublicKey } from "@solana/web3.js";
+import nacl from "tweetnacl";
+import bs58 from "bs58";
+import { randomBytes } from "crypto";
+import { Decimal } from "@prisma/client/runtime/library.js";
+
+const WITHDRAW_CHALLENGE_TTL_MS = 5 * 60_000;
+
+function verifySolanaSignature(walletAddress: string, message: string, signature: string): boolean {
+  try {
+    const pubkey = new PublicKey(walletAddress);
+    const msgBytes = new TextEncoder().encode(message);
+    const sigBytes = bs58.decode(signature);
+    return nacl.sign.detached.verify(msgBytes, sigBytes, pubkey.toBytes());
+  } catch {
+    return false;
+  }
+}
+
+function buildWithdrawMessage(args: {
+  walletAddress: string;
+  amount: string;
+  token: string;
+  nonce: string;
+  expiresAtIso: string;
+}): string {
+  return [
+    "Agent Battle Arena withdrawal authorization",
+    `Wallet: ${args.walletAddress}`,
+    `Amount: ${args.amount} ${args.token}`,
+    `Nonce: ${args.nonce}`,
+    `Expires: ${args.expiresAtIso}`,
+  ].join("\n");
+}
 
 /**
  * Create a router for chain/financial endpoints
@@ -121,9 +155,88 @@ export function createChainRouter(): Router {
   });
 
   /**
+   * POST /withdraw/challenge
+   * Creates a signed-message challenge for withdrawals.
+   * Body: { wallet_address: string, amount: string }
+   */
+  router.post("/withdraw/challenge", withdrawLimiter, async (req, res) => {
+    try {
+      const challengeSchema = z.object({
+        wallet_address: z.string(),
+        amount: z.string(),
+      });
+
+      let parsed;
+      try {
+        parsed = challengeSchema.parse(req.body);
+      } catch (zodError) {
+        return res.status(400).json({
+          error: "Invalid request body",
+          details: zodError,
+        });
+      }
+
+      const { wallet_address, amount } = parsed;
+
+      if (!isValidSolanaAddress(wallet_address)) {
+        return res.status(400).json({
+          error: "Invalid wallet address format",
+        });
+      }
+
+      let amountDecimal: Decimal;
+      try {
+        amountDecimal = new Decimal(amount);
+        if (amountDecimal.lte(0)) {
+          return res.status(400).json({
+            error: "Amount must be a positive number",
+          });
+        }
+      } catch {
+        return res.status(400).json({
+          error: "Invalid amount format",
+        });
+      }
+
+      const nonce = randomBytes(16).toString("hex");
+      const expiresAt = new Date(Date.now() + WITHDRAW_CHALLENGE_TTL_MS);
+      const token = config.arenaTokenMint ? "ARENA" : "SOL";
+      const amountCanonical = amountDecimal.toString();
+      const message = buildWithdrawMessage({
+        walletAddress: wallet_address,
+        amount: amountCanonical,
+        token,
+        nonce,
+        expiresAtIso: expiresAt.toISOString(),
+      });
+
+      await prisma.withdrawalNonce.create({
+        data: {
+          nonce,
+          walletAddress: wallet_address,
+          amount: amountDecimal,
+          message,
+          expiresAt,
+        },
+      });
+
+      return res.json({
+        nonce,
+        message,
+        expiresAt: expiresAt.toISOString(),
+      });
+    } catch (error) {
+      console.error("[Chain Routes] Error creating withdrawal challenge:", error);
+      return res.status(500).json({
+        error: "Internal server error",
+      });
+    }
+  });
+
+  /**
    * POST /withdraw
    * Process a withdrawal
-   * Body: { wallet_address: string, amount: string }
+   * Body: { wallet_address: string, amount: string, nonce: string, signature: string }
    */
   router.post("/withdraw", withdrawLimiter, async (req, res) => {
     try {
@@ -131,6 +244,8 @@ export function createChainRouter(): Router {
       const withdrawalSchema = z.object({
         wallet_address: z.string(),
         amount: z.string(),
+        nonce: z.string().min(1),
+        signature: z.string().min(1),
       });
 
       let parsed;
@@ -143,7 +258,7 @@ export function createChainRouter(): Router {
         });
       }
 
-      const { wallet_address, amount } = parsed;
+      const { wallet_address, amount, nonce, signature } = parsed;
 
       // Validate wallet address format (Solana base58)
       if (!isValidSolanaAddress(wallet_address)) {
@@ -152,10 +267,10 @@ export function createChainRouter(): Router {
         });
       }
 
-      // Validate amount
+      let amountDecimal: Decimal;
       try {
-        const amountNum = parseFloat(amount);
-        if (isNaN(amountNum) || amountNum <= 0) {
+        amountDecimal = new Decimal(amount);
+        if (amountDecimal.lte(0)) {
           return res.status(400).json({
             error: "Amount must be a positive number",
           });
@@ -163,6 +278,66 @@ export function createChainRouter(): Router {
       } catch {
         return res.status(400).json({
           error: "Invalid amount format",
+        });
+      }
+
+      const challenge = await prisma.withdrawalNonce.findUnique({
+        where: { nonce },
+      });
+
+      if (!challenge) {
+        return res.status(400).json({
+          error: "Invalid or expired withdrawal authorization",
+        });
+      }
+
+      if (challenge.walletAddress !== wallet_address) {
+        return res.status(400).json({
+          error: "Withdrawal authorization wallet mismatch",
+        });
+      }
+
+      if (!challenge.amount.equals(amountDecimal)) {
+        return res.status(400).json({
+          error: "Withdrawal authorization amount mismatch",
+        });
+      }
+
+      if (challenge.usedAt) {
+        return res.status(409).json({
+          error: "Withdrawal authorization already used",
+        });
+      }
+
+      if (challenge.expiresAt.getTime() < Date.now()) {
+        return res.status(400).json({
+          error: "Withdrawal authorization expired",
+        });
+      }
+
+      const validSignature = verifySolanaSignature(wallet_address, challenge.message, signature);
+      if (!validSignature) {
+        return res.status(401).json({
+          error: "Invalid wallet signature",
+        });
+      }
+
+      const consume = await prisma.withdrawalNonce.updateMany({
+        where: {
+          nonce,
+          usedAt: null,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      });
+
+      if (consume.count !== 1) {
+        return res.status(409).json({
+          error: "Withdrawal authorization could not be consumed",
         });
       }
 
