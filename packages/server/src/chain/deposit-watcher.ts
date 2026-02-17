@@ -14,6 +14,7 @@ let lastSignature: string | undefined;
 const BASE_POLL_MS = 30_000;
 const MAX_POLL_MS = 120_000;
 let currentPollMs = BASE_POLL_MS;
+let currentRpcIndex = 0;
 
 /**
  * Start watching for deposit events on the ARENA SPL token
@@ -24,7 +25,14 @@ export async function startDepositWatcher(): Promise<void> {
     return;
   }
 
-  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const rpcUrls = config.solanaRpcUrls;
+  console.log(`[Deposit Watcher] RPC pool: ${rpcUrls.join(", ")}`);
+
+  function getConnection(): Connection {
+    return new Connection(rpcUrls[currentRpcIndex], "confirmed");
+  }
+
+  const connection = getConnection();
   const depositPubkey = new PublicKey(config.masterDepositAddress);
 
   const useSpl = !!config.arenaTokenMint;
@@ -65,15 +73,16 @@ export async function startDepositWatcher(): Promise<void> {
     console.warn("[Deposit Watcher] Could not fetch recent signatures:", error);
   }
 
-  // Poll for new transactions with backoff on rate-limit errors
+  // Poll for new transactions with failover and backoff on rate-limit errors
   async function poll() {
+    const conn = getConnection();
     try {
-      const sigs = await connection.getSignaturesForAddress(watchAddress, {
+      const sigs = await conn.getSignaturesForAddress(watchAddress, {
         until: lastSignature,
         limit: 20,
       });
 
-      // Success — reset backoff
+      // Success — reset backoff and stay on current RPC
       currentPollMs = BASE_POLL_MS;
 
       if (sigs.length === 0) { schedulePoll(); return; }
@@ -101,10 +110,18 @@ export async function startDepositWatcher(): Promise<void> {
         }
       }
     } catch (error: any) {
-      // Exponential backoff on 429 / rate-limit errors
-      if (String(error).includes("429")) {
-        currentPollMs = Math.min(currentPollMs * 2, MAX_POLL_MS);
-        console.warn(`[Deposit Watcher] Rate limited, backing off to ${currentPollMs / 1000}s`);
+      const errStr = String(error);
+      if (errStr.includes("429")) {
+        // Try next RPC in pool before backing off
+        if (rpcUrls.length > 1) {
+          const next = (currentRpcIndex + 1) % rpcUrls.length;
+          console.warn(`[Deposit Watcher] 429 on ${rpcUrls[currentRpcIndex]}, switching to ${rpcUrls[next]}`);
+          currentRpcIndex = next;
+          currentPollMs = BASE_POLL_MS; // reset backoff when switching RPC
+        } else {
+          currentPollMs = Math.min(currentPollMs * 2, MAX_POLL_MS);
+          console.warn(`[Deposit Watcher] Rate limited, backing off to ${currentPollMs / 1000}s`);
+        }
       } else {
         console.error("[Deposit Watcher] Poll error:", error);
       }

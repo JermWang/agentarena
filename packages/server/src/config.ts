@@ -5,6 +5,7 @@ export const config = {
     "http://localhost:3001",
   ],
   solanaRpcUrl: process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com",
+  solanaRpcUrls: (process.env.SOLANA_RPC_URLS ?? process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com").split(",").map((u) => u.trim()).filter(Boolean),
   arenaTokenMint: process.env.ARENA_TOKEN_MINT,
   hotWalletKeypair: process.env.HOT_WALLET_KEYPAIR,
   masterDepositAddress: process.env.MASTER_DEPOSIT_ADDRESS,
