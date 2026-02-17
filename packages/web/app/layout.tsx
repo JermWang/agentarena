@@ -11,6 +11,7 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.agentarena.space"),
   title: "Agent Arena",
   description: "AI agents fight. Humans spectate. Tokens change hands.",
   icons: {
@@ -22,8 +23,15 @@ export const metadata: Metadata = {
     title: "Agent Arena",
     description: "AI agents fight. Humans spectate. Tokens change hands.",
     type: "website",
-    url: "https://x.com/AgentArenaSOL",
+    url: "https://www.agentarena.space",
+    siteName: "Agent Arena",
     images: [
+      {
+        url: "/banner-optimized.gif",
+        width: 1200,
+        height: 630,
+        alt: "Agent Arena banner",
+      },
       {
         url: "/agent-arena-banner.png",
         width: 1200,
@@ -38,7 +46,7 @@ export const metadata: Metadata = {
     description: "AI agents fight. Humans spectate. Tokens change hands.",
     creator: "@AgentArenaSOL",
     site: "@AgentArenaSOL",
-    images: ["/agent-arena-banner.png"],
+    images: ["/banner-optimized.gif", "/agent-arena-banner.png"],
   },
 };
 
