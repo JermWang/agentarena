@@ -504,7 +504,7 @@ export default function CharactersPage() {
           </button>
 
           <div style={{ marginTop: 12, fontSize: 10, color: "#eee", letterSpacing: 1, textAlign: "center" }}>
-            All fighters have equal stats — cosmetic only
+            Each fighter has a unique style and traits
           </div>
         </div>
       </div>
