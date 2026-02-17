@@ -5,13 +5,17 @@ import bs58 from "bs58";
 import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { prisma } from "../db/client.js";
 import type { Pit } from "../state/pit.js";
 import type { FightManager } from "../state/fight-manager.js";
 import type { BetManager } from "../state/bet-manager.js";
 import { isValidSolanaAddress, SOLANA_ADDRESS_REGEX } from "../chain/abi.js";
+import { Decimal } from "@prisma/client/runtime/library.js";
+import { config } from "../config.js";
 
 const WALLET_REGEX = SOLANA_ADDRESS_REGEX;
+const SIDE_BET_CHALLENGE_TTL_MS = 5 * 60_000;
 
 /**
  * Verify a Solana wallet signature (ed25519)
@@ -25,6 +29,26 @@ function verifySolanaSignature(walletAddress: string, message: string, signature
   } catch {
     return false;
   }
+}
+
+function buildSideBetMessage(args: {
+  walletAddress: string;
+  fightId: string;
+  backedAgentId: string;
+  amount: string;
+  token: string;
+  nonce: string;
+  expiresAtIso: string;
+}): string {
+  return [
+    "Agent Battle Arena side-bet authorization",
+    `Wallet: ${args.walletAddress}`,
+    `Fight: ${args.fightId}`,
+    `Backed Agent: ${args.backedAgentId}`,
+    `Amount: ${args.amount} ${args.token}`,
+    `Nonce: ${args.nonce}`,
+    `Expires: ${args.expiresAtIso}`,
+  ].join("\n");
 }
 
 const ClaimAgentBody = z.object({
@@ -365,11 +389,115 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
   });
 
   // --- Place side bet ---
+  router.post("/arena/side-bet/challenge", async (req: Request, res: Response) => {
+    try {
+      const challengeSchema = z.object({
+        fight_id: z.string().min(1),
+        wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX),
+        backed_agent: z.string().min(1),
+        amount: z.union([z.string(), z.number()]),
+      });
+
+      const parsed = challengeSchema.parse(req.body);
+      const amountDecimal = new Decimal(String(parsed.amount));
+      if (amountDecimal.lte(0)) {
+        return res.status(400).json({ ok: false, error: "Amount must be positive" });
+      }
+
+      const fight = await prisma.fight.findUnique({
+        where: { id: parsed.fight_id },
+        select: { id: true, agent1Id: true, agent2Id: true, status: true },
+      });
+      if (!fight) return res.status(404).json({ ok: false, error: "Fight not found" });
+      if (fight.status !== "active") return res.status(400).json({ ok: false, error: "Fight is not active" });
+
+      const agent = await prisma.agent.findUnique({
+        where: { username: parsed.backed_agent },
+        select: { id: true },
+      });
+      const backedAgentId = agent?.id ?? parsed.backed_agent;
+      if (backedAgentId !== fight.agent1Id && backedAgentId !== fight.agent2Id) {
+        return res.status(400).json({ ok: false, error: "Backed agent is not in this fight" });
+      }
+
+      const nonce = randomBytes(16).toString("hex");
+      const expiresAt = new Date(Date.now() + SIDE_BET_CHALLENGE_TTL_MS);
+      const token = config.arenaTokenMint ? "ARENA" : "SOL";
+      const message = buildSideBetMessage({
+        walletAddress: parsed.wallet_address,
+        fightId: parsed.fight_id,
+        backedAgentId,
+        amount: amountDecimal.toString(),
+        token,
+        nonce,
+        expiresAtIso: expiresAt.toISOString(),
+      });
+
+      await prisma.sideBetNonce.create({
+        data: {
+          nonce,
+          walletAddress: parsed.wallet_address,
+          fightId: parsed.fight_id,
+          backedAgentId,
+          amount: amountDecimal,
+          message,
+          expiresAt,
+        },
+      });
+
+      return res.json({ ok: true, nonce, message, expiresAt: expiresAt.toISOString() });
+    } catch (e: any) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, error: e.errors[0].message });
+      }
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   router.post("/arena/side-bet", async (req: Request, res: Response) => {
     try {
-      const { fight_id, wallet_address, backed_agent, amount } = req.body;
-      if (!fight_id || !wallet_address || !backed_agent || !amount) {
+      const SideBetBody = z.object({
+        fight_id: z.string().min(1),
+        wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX),
+        backed_agent: z.string().min(1),
+        amount: z.union([z.string(), z.number()]),
+        nonce: z.string().min(1),
+        signature: z.string().min(1),
+      });
+
+      const { fight_id, wallet_address, backed_agent, amount, nonce, signature } = SideBetBody.parse(req.body);
+      if (!fight_id || !wallet_address || !backed_agent || !amount || !nonce || !signature) {
         return res.status(400).json({ ok: false, error: "Missing required fields" });
+      }
+
+      const amountDecimal = new Decimal(String(amount));
+      if (amountDecimal.lte(0)) {
+        return res.status(400).json({ ok: false, error: "Amount must be positive" });
+      }
+
+      const challenge = await prisma.sideBetNonce.findUnique({ where: { nonce } });
+      if (!challenge) {
+        return res.status(400).json({ ok: false, error: "Invalid or expired side-bet authorization" });
+      }
+      if (challenge.walletAddress !== wallet_address) {
+        return res.status(400).json({ ok: false, error: "Side-bet authorization wallet mismatch" });
+      }
+      if (challenge.fightId !== fight_id) {
+        return res.status(400).json({ ok: false, error: "Side-bet authorization fight mismatch" });
+      }
+      if (!challenge.amount.equals(amountDecimal)) {
+        return res.status(400).json({ ok: false, error: "Side-bet authorization amount mismatch" });
+      }
+      if (challenge.usedAt) {
+        return res.status(409).json({ ok: false, error: "Side-bet authorization already used" });
+      }
+      if (challenge.expiresAt.getTime() < Date.now()) {
+        return res.status(400).json({ ok: false, error: "Side-bet authorization expired" });
+      }
+
+      const validSignature = verifySolanaSignature(wallet_address, challenge.message, signature);
+      if (!validSignature) {
+        return res.status(401).json({ ok: false, error: "Invalid wallet signature" });
       }
 
       // Resolve agent username to agent ID
@@ -379,7 +507,25 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
       });
       const backedAgentId = agent?.id ?? backed_agent;
 
-      const bet = await betManager.placeBet(fight_id, wallet_address, backedAgentId, String(amount));
+      if (challenge.backedAgentId !== backedAgentId) {
+        return res.status(400).json({ ok: false, error: "Side-bet authorization backed agent mismatch" });
+      }
+
+      const consume = await prisma.sideBetNonce.updateMany({
+        where: {
+          nonce,
+          usedAt: null,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+        data: { usedAt: new Date() },
+      });
+      if (consume.count !== 1) {
+        return res.status(409).json({ ok: false, error: "Side-bet authorization could not be consumed" });
+      }
+
+      const bet = await betManager.placeBet(fight_id, wallet_address, backedAgentId, amountDecimal.toString());
       const pool = await betManager.getBets(fight_id);
 
       res.json({

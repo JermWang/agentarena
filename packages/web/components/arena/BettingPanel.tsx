@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import dynamic from "next/dynamic";
+import bs58 from "bs58";
 import type { FightState } from "./useGameState";
 
 const WalletMultiButtonDynamic = dynamic(
@@ -18,7 +19,7 @@ interface BetPool {
 }
 
 export function BettingPanel({ state }: { state: FightState }) {
-  const { publicKey, connected: isConnected } = useWallet();
+  const { publicKey, connected: isConnected, signMessage } = useWallet();
   const address = publicKey?.toBase58();
   const [pool, setPool] = useState<BetPool>({ p1: 0, p2: 0 });
   const [amount, setAmount] = useState("50000");
@@ -45,9 +46,34 @@ export function BettingPanel({ state }: { state: FightState }) {
 
   const placeBet = async () => {
     if (!address || !selectedAgent || !amount) return;
+    if (!signMessage) {
+      setMessage("Wallet does not support signing");
+      return;
+    }
     setPlacing(true);
     setMessage("");
     try {
+      const challengeResponse = await fetch(`${SERVER}/api/v1/arena/side-bet/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fight_id: state.fightId,
+          wallet_address: address,
+          backed_agent: selectedAgent,
+          amount,
+        }),
+      });
+      const challengeData = await challengeResponse.json();
+      if (!challengeResponse.ok || !challengeData.ok || !challengeData.message || !challengeData.nonce) {
+        setMessage(challengeData.error || "Failed to create bet authorization");
+        setPlacing(false);
+        return;
+      }
+
+      const msgBytes = new TextEncoder().encode(challengeData.message);
+      const sigBytes = await signMessage(msgBytes);
+      const signature = bs58.encode(sigBytes);
+
       const r = await fetch(`${SERVER}/api/v1/arena/side-bet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,7 +81,9 @@ export function BettingPanel({ state }: { state: FightState }) {
           fight_id: state.fightId,
           wallet_address: address,
           backed_agent: selectedAgent,
-          amount: parseFloat(amount),
+          amount,
+          nonce: challengeData.nonce,
+          signature,
         }),
       });
       const data = await r.json();

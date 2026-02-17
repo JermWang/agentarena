@@ -41,7 +41,7 @@ migrate.mjs
 packages/web/start-dev.mjs
 
 # Stale subfolder (old pre-migration copy)
-arena/
+/arena/
 
 # Python
 __pycache__/

@@ -133,3 +133,19 @@ model WithdrawalNonce {
   @@index([walletAddress, createdAt])
   @@index([expiresAt])
 }
+
+model SideBetNonce {
+  nonce         String    @id
+  walletAddress String
+  fightId       String
+  backedAgentId String
+  amount        Decimal   @db.Decimal(36, 18)
+  message       String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([walletAddress, createdAt])
+  @@index([fightId, createdAt])
+  @@index([expiresAt])
+}
