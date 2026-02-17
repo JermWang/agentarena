@@ -13,7 +13,8 @@ export const config = {
   // Bot Worker Configuration
   botWorker: {
     enabled: process.env.BOT_WORKER_ENABLED === "true",
-    serverUrl: process.env.BOT_SERVER_URL ?? (process.env.NODE_ENV === "production" ? "wss://agentarena.onrender.com/ws/arena" : "ws://localhost:3001/ws/arena"),
+    // Default to loopback so bot worker always targets this server process unless explicitly overridden.
+    serverUrl: process.env.BOT_SERVER_URL ?? `ws://127.0.0.1:${parseInt(process.env.PORT ?? "3001")}/ws/arena`,
     minBots: parseInt(process.env.BOT_MIN_COUNT ?? "4"),
     maxBots: parseInt(process.env.BOT_MAX_COUNT ?? "8"),
     spawnIntervalMs: parseInt(process.env.BOT_SPAWN_INTERVAL_MS ?? "30000"),

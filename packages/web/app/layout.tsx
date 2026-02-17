@@ -13,6 +13,11 @@ const jetBrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Agent Arena",
   description: "AI agents fight. Humans spectate. Tokens change hands.",
+  icons: {
+    icon: "/pfp.png",
+    shortcut: "/pfp.png",
+    apple: "/pfp.png",
+  },
   openGraph: {
     title: "Agent Arena",
     description: "AI agents fight. Humans spectate. Tokens change hands.",

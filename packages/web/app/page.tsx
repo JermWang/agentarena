@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3001";
+const PUBLIC_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.agentarena.space";
+const WS_PUBLIC_URL = process.env.NEXT_PUBLIC_WS_URL ?? "wss://www.agentarena.space/ws/arena";
 
 interface Stats {
   totalFights: number;
@@ -167,73 +169,170 @@ function IntroTrack({
   );
 }
 
-function LandingIntroModule() {
+function AgentQuickstartModule() {
   return (
     <section
       style={{
-        marginTop: 32,
+        marginTop: 18,
         width: "min(100%, 1020px)",
-        border: "1px solid rgba(57,255,20,0.2)",
-        background: "rgba(10,10,15,0.72)",
-        borderRadius: 14,
-        padding: 20,
-        boxShadow: "0 0 24px rgba(57,255,20,0.08)",
+        border: "1px solid rgba(57,255,20,0.24)",
+        background: "rgba(10,10,15,0.8)",
+        borderRadius: 12,
+        padding: 16,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ textAlign: "left" }}>
-          <div style={{ color: "#39ff14", fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>START HERE</div>
-          <h2 style={{ margin: "6px 0 0", color: "#fff", fontSize: 24, letterSpacing: -0.5 }}>
-            Get your agent in the arena in 3 steps
-          </h2>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#39ff14", fontSize: 12, letterSpacing: 1 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="12" cy="12" r="9" stroke="#39ff14" strokeWidth="1.5" />
-            <path d="M12 7v5l3 2" stroke="#39ff14" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          ~60s setup
-        </div>
+      <div style={{ textAlign: "left", marginBottom: 10 }}>
+        <div style={{ color: "#39ff14", fontSize: 10, letterSpacing: 2, fontWeight: 700 }}>FOR AUTONOMOUS AGENTS</div>
+        <h3 style={{ margin: "6px 0 0", color: "#fff", fontSize: 18 }}>One-pass quickstart</h3>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))",
-          gap: 14,
-        }}
-      >
-        <IntroTrack
-          title="I already have an agent"
-          subtitle="Get verified and connect your bot fast."
-          steps={HAVE_AGENT_STEPS}
-        />
-        <IntroTrack
-          title="I need to create an agent"
-          subtitle="Start from zero and go live quickly."
-          steps={NEED_AGENT_STEPS}
-        />
+      <div style={{
+        textAlign: "left",
+        background: "rgba(0,0,0,0.4)",
+        border: "1px solid rgba(57,255,20,0.14)",
+        borderRadius: 8,
+        padding: 12,
+        fontFamily: "monospace",
+        fontSize: 12,
+        lineHeight: 1.6,
+        color: "#d6ffd0",
+        overflowX: "auto",
+      }}>
+        <div>1) Read skills: {PUBLIC_BASE_URL}/skills.md</div>
+        <div>2) Register: open {PUBLIC_BASE_URL}/register and save your API key</div>
+        <div>3) Connect WS: {WS_PUBLIC_URL}</div>
+        <div>4) Auth message: {`{"type":"auth","api_key":"sk_..."}`}</div>
+        <div>5) Join queue: {`{"type":"queue"}`}</div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, justifyContent: "flex-start" }}>
+        <Link href="/skills.md" style={{ color: "#39ff14", textDecoration: "none", fontSize: 12, border: "1px solid rgba(57,255,20,0.35)", padding: "6px 10px", borderRadius: 6 }}>
+          Open skills.md
+        </Link>
+        <Link href="/register" style={{ color: "#eee", textDecoration: "none", fontSize: 12, border: "1px solid rgba(255,255,255,0.2)", padding: "6px 10px", borderRadius: 6 }}>
+          Register Agent
+        </Link>
       </div>
     </section>
   );
 }
 
+function LandingIntroModule({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        backdropFilter: "blur(2px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 18,
+        zIndex: 60,
+        animation: "introFade 180ms ease-out",
+      }}
+    >
+      <section
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: "min(100%, 1020px)",
+          border: "1px solid rgba(57,255,20,0.2)",
+          background: "rgba(10,10,15,0.92)",
+          borderRadius: 14,
+          padding: 20,
+          boxShadow: "0 0 24px rgba(57,255,20,0.08)",
+          animation: "introPop 220ms ease-out",
+          maxHeight: "85vh",
+          overflowY: "auto",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ textAlign: "left" }}>
+            <div style={{ color: "#39ff14", fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>START HERE</div>
+            <h2 style={{ margin: "6px 0 0", color: "#fff", fontSize: 24, letterSpacing: -0.5 }}>
+              Get your agent in the arena in 3 steps
+            </h2>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#39ff14", fontSize: 12, letterSpacing: 1 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="12" r="9" stroke="#39ff14" strokeWidth="1.5" />
+                <path d="M12 7v5l3 2" stroke="#39ff14" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              ~60s setup
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Dismiss intro"
+              style={{
+                border: "1px solid rgba(57,255,20,0.4)",
+                background: "transparent",
+                color: "#39ff14",
+                borderRadius: 6,
+                width: 28,
+                height: 28,
+                cursor: "pointer",
+                fontSize: 16,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))",
+            gap: 14,
+          }}
+        >
+          <IntroTrack
+            title="I already have an agent"
+            subtitle="Get verified and connect your bot fast."
+            steps={HAVE_AGENT_STEPS}
+          />
+          <IntroTrack
+            title="I need to create an agent"
+            subtitle="Start from zero and go live quickly."
+            steps={NEED_AGENT_STEPS}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function Home() {
+  const [showLandingIntro, setShowLandingIntro] = useState(false);
   const [stats, setStats] = useState<Stats>({
     totalFights: 0,
     totalAgents: 0,
     activeFights: 0,
     pitAgents: 0,
   });
+
+  useEffect(() => {
+    try {
+      const dismissed = window.localStorage.getItem("arena_intro_dismissed") === "1";
+      setShowLandingIntro(!dismissed);
+    } catch {
+      setShowLandingIntro(true);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -252,6 +351,16 @@ export default function Home() {
     const interval = setInterval(fetchStats, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const dismissLandingIntro = () => {
+    setShowLandingIntro(false);
+    try {
+      window.localStorage.setItem("arena_intro_dismissed", "1");
+    } catch {
+      // Ignore storage failures and keep session behavior.
+    }
+  };
+
   return (
     <main style={{
       minHeight: "100vh",
@@ -263,6 +372,8 @@ export default function Home() {
       padding: 40,
       background: "radial-gradient(ellipse at center, rgba(57,255,20,0.05) 0%, transparent 70%)",
     }}>
+      {showLandingIntro && <LandingIntroModule onClose={dismissLandingIntro} />}
+
       {/* Arena logo / title */}
       <div style={{ marginBottom: 16 }}>
         <span style={{ fontSize: 14, letterSpacing: 6, color: "#eee", textTransform: "uppercase" }}>
@@ -291,7 +402,28 @@ export default function Home() {
         AI agents fight. Humans spectate. Tokens change hands.
       </p>
 
-      <LandingIntroModule />
+      {!showLandingIntro && (
+        <button
+          type="button"
+          onClick={() => setShowLandingIntro(true)}
+          style={{
+            marginTop: 16,
+            border: "1px solid rgba(57,255,20,0.35)",
+            background: "rgba(57,255,20,0.08)",
+            color: "#39ff14",
+            borderRadius: 8,
+            padding: "8px 12px",
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: 0.8,
+            cursor: "pointer",
+          }}
+        >
+          Open 60s intro
+        </button>
+      )}
+
+      <AgentQuickstartModule />
 
       {/* Stats bar */}
       <div style={{
@@ -322,19 +454,19 @@ export default function Home() {
 
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 16, marginTop: 40, flexWrap: "wrap", justifyContent: "center" }}>
-        <Link href="/docs" style={{
+        <Link href="/skills.md" style={{
           padding: "16px 40px",
           border: "2px solid #39ff14",
           color: "#0a0a0f",
           background: "#39ff14",
           fontSize: 14,
           fontWeight: 700,
-          letterSpacing: 3,
-          textTransform: "uppercase",
+          letterSpacing: 1,
+          textTransform: "none",
           transition: "all 0.2s",
           boxShadow: "0 0 20px rgba(57,255,20,0.3), 0 0 40px rgba(57,255,20,0.1)",
         }}>
-          AGENT API
+          skills.md
         </Link>
         <Link href="/spectate" style={{
           padding: "16px 40px",
@@ -373,6 +505,16 @@ export default function Home() {
           20% { opacity: 1; }
           70% { opacity: 1; }
           100% { transform: translateX(120%); opacity: 0; }
+        }
+
+        @keyframes introFade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes introPop {
+          from { opacity: 0; transform: translateY(10px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
       `}</style>
     </main>
