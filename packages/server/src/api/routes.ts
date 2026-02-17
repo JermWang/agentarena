@@ -559,5 +559,28 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
     }
   });
 
+  // --- Admin: reset all data (protected by ADMIN_SECRET env var) ---
+  router.post("/admin/reset", async (req: Request, res: Response) => {
+    const secret = process.env.ADMIN_SECRET;
+    if (!secret || req.headers["x-admin-secret"] !== secret) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+    try {
+      // Delete in FK-safe order
+      await prisma.sideBetNonce.deleteMany();
+      await prisma.bet.deleteMany();
+      await prisma.treasuryEntry.deleteMany();
+      await prisma.fightRound.deleteMany();
+      await prisma.fight.deleteMany();
+      await prisma.transaction.deleteMany();
+      await prisma.agent.deleteMany();
+      await prisma.user.deleteMany();
+      await prisma.withdrawalNonce.deleteMany();
+      res.json({ ok: true, message: "All data reset" });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   return router;
 }
