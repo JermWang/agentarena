@@ -232,7 +232,7 @@ export class ArenaBot {
       });
     }
 
-    if (!this.isInQueue && now - this.lastCalloutAt > 8000 && Math.random() < 0.72) {
+    if (!this.isInQueue && now - this.lastCalloutAt > 7000 && Math.random() < 0.85) {
       const candidates = Array.from(this.pitAgents).filter((name) => name !== this.username);
       if (candidates.length > 0) {
         const target = candidates[Math.floor(Math.random() * candidates.length)];
@@ -325,7 +325,12 @@ export class ArenaBot {
           }
         }
         this.startPitBehavior();
-        this.scheduleQueue(2000, 7000);
+        this.lastPitChatAt = Date.now();
+        this.send({
+          type: "pit_chat",
+          message: TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)],
+        });
+        this.scheduleQueue(5000, 12000);
         break;
 
       case "queued":
@@ -359,8 +364,8 @@ export class ArenaBot {
             message: msg.winner === this.agentId ? "Another one down. Next." : "Run it back. I downloaded your pattern.",
           });
         }
-        // Re-queue after short delay, leaving room for pit behavior.
-        this.scheduleQueue(2000, 6000);
+        // Re-queue after a short pit window so bots can taunt/callout first.
+        this.scheduleQueue(6000, 12000);
         break;
 
       case "callout_received":
