@@ -537,6 +537,9 @@ function FightsView() {
                         height={80}
                         style={{
                           display: "block",
+                          width: 80,
+                          height: 80,
+                          maxWidth: "none",
                           imageRendering: "pixelated",
                           filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
                         }}
@@ -598,6 +601,9 @@ function FightsView() {
                         height={80}
                         style={{
                           display: "block",
+                          width: 80,
+                          height: 80,
+                          maxWidth: "none",
                           imageRendering: "pixelated",
                           filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
                           transform: "scaleX(-1)",
