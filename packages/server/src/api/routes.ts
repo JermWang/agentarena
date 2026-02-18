@@ -263,7 +263,7 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
 
   // --- Active fights ---
   router.get("/arena/fights", (_req: Request, res: Response) => {
-    const fights: Array<{ fightId: string; agent1: string; agent2: string; wager: number }> = [];
+    const fights: Array<{ fightId: string; agent1: string; agent2: string; agent1Character: string; agent2Character: string; wager: number }> = [];
     for (const [fightId, active] of fightManager.activeFights) {
       const a1 = pit.agents.get(active.agent1Id);
       const a2 = pit.agents.get(active.agent2Id);
@@ -271,6 +271,8 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
         fightId,
         agent1: a1?.username ?? active.agent1Id,
         agent2: a2?.username ?? active.agent2Id,
+        agent1Character: a1?.characterId ?? "ronin",
+        agent2Character: a2?.characterId ?? "ronin",
         wager: active.wager,
       });
     }

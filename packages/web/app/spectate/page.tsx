@@ -14,6 +14,7 @@ type View = "pit" | "fights";
 interface ActiveFight {
   fightId: string;
   agents: [string, string];
+  characters: [string, string];
   round?: number;
   p1Hp?: number;
   p2Hp?: number;
@@ -429,6 +430,7 @@ function FightsView() {
         if (data.ok) setFights(data.fights.map((f: any) => ({
           fightId: f.fightId,
           agents: [f.agent1 ?? f.agents?.[0] ?? "?", f.agent2 ?? f.agents?.[1] ?? "?"],
+          characters: [f.agent1Character ?? "ronin", f.agent2Character ?? "ronin"],
           round: f.round,
           p1Hp: f.p1Hp,
           p2Hp: f.p2Hp,
@@ -512,38 +514,134 @@ function FightsView() {
             {fights.map((f) => (
               <Link key={f.fightId} href={"/fight/" + f.fightId} style={{
                 display: "block",
-                padding: 24,
+                position: "relative",
+                padding: "20px 24px",
                 border: "1px solid rgba(57,255,20,0.2)",
                 background: "rgba(57,255,20,0.03)",
                 transition: "all 0.2s",
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 20, fontWeight: 700 }}>
-                    <span style={{ color: "#3939ff" }}>{f.agents[0]}</span>
-                    <span style={{ color: "#eee", margin: "0 12px", fontSize: 14 }}>VS</span>
-                    <span style={{ color: "#ff3939" }}>{f.agents[1]}</span>
+                {/* Face-off thumbnail row */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 0,
+                  marginBottom: 12,
+                }}>
+                  {/* Agent 1 side */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+                    <img
+                      src={`/sprites/${f.characters[0]}-preview.png`}
+                      alt={f.agents[0]}
+                      style={{
+                        width: 72,
+                        height: 72,
+                        objectFit: "contain",
+                        imageRendering: "pixelated",
+                        filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
+                      }}
+                    />
+                    <span style={{
+                      color: "#3939ff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      fontFamily: "monospace",
+                      marginTop: 4,
+                      textAlign: "center",
+                      maxWidth: 120,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {f.agents[0]}
+                    </span>
                   </div>
+
+                  {/* VS divider */}
                   <div style={{
-                    padding: "4px 12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    padding: "0 12px",
+                  }}>
+                    <span style={{
+                      color: "#39ff14",
+                      fontSize: 22,
+                      fontWeight: 900,
+                      letterSpacing: 4,
+                      textShadow: "0 0 12px rgba(57,255,20,0.4)",
+                    }}>
+                      VS
+                    </span>
+                    {f.wager && f.wager > 0 ? (
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#ff6b00",
+                        letterSpacing: 1,
+                        marginTop: 4,
+                        whiteSpace: "nowrap",
+                      }}>
+                        {(f.wager / 1000).toFixed(0)}K $ARENA
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Agent 2 side */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+                    <img
+                      src={`/sprites/${f.characters[1]}-preview.png`}
+                      alt={f.agents[1]}
+                      style={{
+                        width: 72,
+                        height: 72,
+                        objectFit: "contain",
+                        imageRendering: "pixelated",
+                        filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
+                        transform: "scaleX(-1)",
+                      }}
+                    />
+                    <span style={{
+                      color: "#ff3939",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      fontFamily: "monospace",
+                      marginTop: 4,
+                      textAlign: "center",
+                      maxWidth: 120,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {f.agents[1]}
+                    </span>
+                  </div>
+
+                  {/* LIVE badge */}
+                  <div style={{
+                    position: "absolute",
+                    right: 16,
+                    top: 16,
+                    padding: "4px 10px",
                     background: "rgba(57,255,20,0.1)",
                     border: "1px solid rgba(57,255,20,0.3)",
                     color: "#39ff14",
-                    fontSize: 11,
+                    fontSize: 10,
                     letterSpacing: 2,
+                    fontWeight: 700,
                   }}>
                     LIVE
                   </div>
                 </div>
-                {f.wager && f.wager > 0 && (
-                  <div style={{
-                    fontSize: 14, fontWeight: 700, color: "#ff6b00",
-                    marginTop: 8, letterSpacing: 1,
-                  }}>
-                    {(f.wager / 1000).toFixed(0)}K $ARENA ON THE LINE
-                  </div>
-                )}
+
+                {/* Round info */}
                 {f.round && (
-                  <div style={{ color: "#eee", fontSize: 12, marginTop: 8 }}>
+                  <div style={{
+                    color: "#eee",
+                    fontSize: 11,
+                    textAlign: "center",
+                    fontFamily: "monospace",
+                  }}>
                     Round {f.round} &middot; HP: {f.p1Hp ?? "?"} - {f.p2Hp ?? "?"}
                   </div>
                 )}
