@@ -133,6 +133,7 @@ export class BotWorker {
     this.botCounter++;
     const character = CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
     const walletAddress = `${this.config.demoWalletPrefix}_${nanoid(8)}`;
+    let username = "";
 
     try {
       // Create bot agent in database with API key
@@ -148,7 +149,6 @@ export class BotWorker {
 
       // Create the demo agent. Retry on rare username collisions.
       let agent: { id: string; username: string } | null = null;
-      let username = "";
       for (let attempt = 0; attempt < 5; attempt++) {
         username = this.generateBotName();
         try {
