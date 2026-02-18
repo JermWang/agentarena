@@ -534,9 +534,8 @@ function FightsView() {
                       src={`/sprites/${f.characters[0]}-preview.png`}
                       alt={f.agents[0]}
                       style={{
-                        width: 72,
-                        height: 72,
-                        objectFit: "contain",
+                        height: 80,
+                        width: "auto",
                         imageRendering: "pixelated",
                         filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
                       }}
@@ -593,9 +592,8 @@ function FightsView() {
                       src={`/sprites/${f.characters[1]}-preview.png`}
                       alt={f.agents[1]}
                       style={{
-                        width: 72,
-                        height: 72,
-                        objectFit: "contain",
+                        height: 80,
+                        width: "auto",
                         imageRendering: "pixelated",
                         filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
                         transform: "scaleX(-1)",
