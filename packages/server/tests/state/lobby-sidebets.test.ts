@@ -1,188 +1,84 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { Lobby, SIDE_BET_RAKE } from "../../src/state/lobby.js";
-import { Fight } from "../../src/combat/fight.js";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { Decimal } from "@prisma/client/runtime/library";
 
-function createFightWithBets(lobby: Lobby, bets: Array<{ wallet: string; agent: string; amount: number }>): string {
-  lobby.registerAgent("a", "#A", "0x1", "default");
-  lobby.registerAgent("b", "#B", "0x2", "default");
-  const challenge = lobby.createChallenge("a", "b", 10);
-  const fight = lobby.acceptChallenge(challenge.id, "b");
-  const fightId = fight.getState().fightId;
+const txMock = {
+  bet: {
+    findMany: vi.fn(),
+    update: vi.fn().mockResolvedValue({}),
+  },
+  user: {
+    update: vi.fn().mockResolvedValue({}),
+  },
+  transaction: {
+    create: vi.fn().mockResolvedValue({}),
+  },
+  treasuryEntry: {
+    create: vi.fn().mockResolvedValue({}),
+  },
+};
 
-  // Place bets while fight is active
-  for (const bet of bets) {
-    lobby.placeSideBet(fightId, bet.wallet, bet.agent, bet.amount);
-  }
+vi.mock("../../src/db/client.js", () => ({
+  prisma: {
+    $transaction: (cb: (tx: typeof txMock) => Promise<unknown>) => cb(txMock),
+  },
+}));
 
-  // Now run fight to completion: a always heavy_punch, b always taunt -> a wins
-  for (let round = 0; round < 2; round++) {
-    while (fight.getState().status === "waiting_for_actions") {
-      fight.submitAction("a", "heavy_punch");
-      fight.submitAction("b", "taunt");
-    }
-    if (fight.getState().status === "round_over") fight.nextRound();
-  }
+import { BetManager } from "../../src/state/bet-manager.js";
 
-  return fightId;
-}
-
-describe("Lobby.resolveSideBets", () => {
-  let lobby: Lobby;
+describe("BetManager.resolveBets", () => {
+  let manager: BetManager;
 
   beforeEach(() => {
-    lobby = new Lobby();
+    manager = new BetManager();
+    vi.clearAllMocks();
   });
 
-  it("pays winners proportionally from pool minus rake", () => {
-    const fightId = createFightWithBets(lobby, [
-      { wallet: "0xbet1", agent: "a", amount: 30 },
-      { wallet: "0xbet2", agent: "a", amount: 20 },
-      { wallet: "0xbet3", agent: "b", amount: 50 },
+  it("pays winners proportionally from net pool (post-rake)", async () => {
+    txMock.bet.findMany.mockResolvedValue([
+      { id: "b1", walletAddress: "w1", backedAgentId: "a", amount: new Decimal(30), status: "active" },
+      { id: "b2", walletAddress: "w2", backedAgentId: "a", amount: new Decimal(20), status: "active" },
+      { id: "b3", walletAddress: "w3", backedAgentId: "b", amount: new Decimal(50), status: "active" },
     ]);
 
-    const result = lobby.resolveSideBets(fightId);
+    const result = await manager.resolveBets("fight_1", "a");
 
-    expect(result.winner).toBe("a");
-    expect(result.totalPool).toBe(100);
-    expect(result.rake).toBe(3); // 3%
-    expect(result.netPool).toBe(97);
+    expect(result.totalPool.equals(new Decimal(100))).toBe(true);
+    expect(result.rake.equals(new Decimal(3))).toBe(true);
 
-    const p1 = result.payouts.find(p => p.walletAddress === "0xbet1")!;
-    const p2 = result.payouts.find(p => p.walletAddress === "0xbet2")!;
-    const p3 = result.payouts.find(p => p.walletAddress === "0xbet3")!;
+    const p1 = result.payouts.find((p) => p.walletAddress === "w1");
+    const p2 = result.payouts.find((p) => p.walletAddress === "w2");
+    const p3 = result.payouts.find((p) => p.walletAddress === "w3");
 
-    // 0xbet1 bet $30 out of $50 winning side = 60% of $97 = $58.20
-    expect(p1.status).toBe("won");
-    expect(p1.payout).toBe(58.2);
-
-    // 0xbet2 bet $20 out of $50 winning side = 40% of $97 = $38.80
-    expect(p2.status).toBe("won");
-    expect(p2.payout).toBe(38.8);
-
-    // 0xbet3 backed loser
-    expect(p3.status).toBe("lost");
-    expect(p3.payout).toBe(0);
+    expect(p1?.status).toBe("won");
+    expect(p1?.payout.equals(new Decimal("58.2"))).toBe(true);
+    expect(p2?.status).toBe("won");
+    expect(p2?.payout.equals(new Decimal("38.8"))).toBe(true);
+    expect(p3?.status).toBe("lost");
+    expect(p3?.payout.equals(new Decimal(0))).toBe(true);
   });
 
-  it("updates bet statuses in the lobby", () => {
-    const fightId = createFightWithBets(lobby, [
-      { wallet: "0xbet1", agent: "a", amount: 10 },
-      { wallet: "0xbet2", agent: "b", amount: 10 },
+  it("refunds all bets on draw", async () => {
+    txMock.bet.findMany.mockResolvedValue([
+      { id: "b1", walletAddress: "w1", backedAgentId: "a", amount: new Decimal(40), status: "active" },
+      { id: "b2", walletAddress: "w2", backedAgentId: "b", amount: new Decimal(60), status: "active" },
     ]);
 
-    lobby.resolveSideBets(fightId);
+    const result = await manager.resolveBets("fight_2", null);
 
-    const { bets } = lobby.getSideBets(fightId);
-    const winner = bets.find(b => b.backedAgent === "a")!;
-    const loser = bets.find(b => b.backedAgent === "b")!;
-    expect(winner.status).toBe("won");
-    expect(loser.status).toBe("lost");
+    expect(result.rake.equals(new Decimal(0))).toBe(true);
+    expect(result.payouts.every((p) => p.status === "refunded")).toBe(true);
+    expect(result.payouts.every((p) => p.payout.equals(p.amount))).toBe(true);
   });
 
-  it("throws if fight not found", () => {
-    expect(() => lobby.resolveSideBets("nonexistent")).toThrow("Fight not found");
-  });
-
-  it("throws if fight not over", () => {
-    const fightId = setupActiveFight(lobby);
-    expect(() => lobby.resolveSideBets(fightId)).toThrow("Fight not over yet");
-  });
-
-  it("returns empty payouts when no bets placed", () => {
-    const fightId = createFightWithBets(lobby, []);
-    const result = lobby.resolveSideBets(fightId);
-
-    expect(result.payouts).toHaveLength(0);
-    expect(result.totalPool).toBe(0);
-    expect(result.rake).toBe(0);
-    expect(result.netPool).toBe(0);
-  });
-
-  it("refunds all bets when all bets are on losing side", () => {
-    const fightId = createFightWithBets(lobby, [
-      { wallet: "0xbet1", agent: "b", amount: 25 },
-      { wallet: "0xbet2", agent: "b", amount: 15 },
+  it("refunds all bets when no one backed the winner", async () => {
+    txMock.bet.findMany.mockResolvedValue([
+      { id: "b1", walletAddress: "w1", backedAgentId: "b", amount: new Decimal(25), status: "active" },
+      { id: "b2", walletAddress: "w2", backedAgentId: "b", amount: new Decimal(15), status: "active" },
     ]);
 
-    const result = lobby.resolveSideBets(fightId);
+    const result = await manager.resolveBets("fight_3", "a");
 
-    // No one backed the winner, so refund everyone
-    expect(result.rake).toBe(0);
-    for (const p of result.payouts) {
-      expect(p.status).toBe("refunded");
-      expect(p.payout).toBe(p.betAmount);
-    }
+    expect(result.rake.equals(new Decimal(0))).toBe(true);
+    expect(result.payouts.every((p) => p.status === "refunded")).toBe(true);
   });
-
-  it("handles single winner taking entire net pool", () => {
-    const fightId = createFightWithBets(lobby, [
-      { wallet: "0xbet1", agent: "a", amount: 10 },
-      { wallet: "0xbet2", agent: "b", amount: 90 },
-    ]);
-
-    const result = lobby.resolveSideBets(fightId);
-
-    expect(result.totalPool).toBe(100);
-    expect(result.rake).toBe(3);
-
-    const winner = result.payouts.find(p => p.walletAddress === "0xbet1")!;
-    expect(winner.payout).toBe(97); // entire net pool
-    expect(winner.status).toBe("won");
-  });
-
-  it("handles all bets on winning side (everyone wins smaller)", () => {
-    const fightId = createFightWithBets(lobby, [
-      { wallet: "0xbet1", agent: "a", amount: 60 },
-      { wallet: "0xbet2", agent: "a", amount: 40 },
-    ]);
-
-    const result = lobby.resolveSideBets(fightId);
-
-    expect(result.totalPool).toBe(100);
-    expect(result.rake).toBe(3);
-
-    const p1 = result.payouts.find(p => p.walletAddress === "0xbet1")!;
-    const p2 = result.payouts.find(p => p.walletAddress === "0xbet2")!;
-
-    // 60% of $97 = $58.20, 40% of $97 = $38.80
-    expect(p1.payout).toBe(58.2);
-    expect(p2.payout).toBe(38.8);
-  });
-
-  it("SIDE_BET_RAKE constant is 0.03", () => {
-    expect(SIDE_BET_RAKE).toBe(0.03);
-  });
-
-  it("increments winner wins and loser losses after resolveSideBets", () => {
-    const fightId = createFightWithBets(lobby, [
-      { wallet: "0xbet1", agent: "a", amount: 10 },
-      { wallet: "0xbet2", agent: "b", amount: 10 },
-    ]);
-
-    // Before resolution
-    expect(lobby.agents.get("a")!.wins).toBe(0);
-    expect(lobby.agents.get("a")!.losses).toBe(0);
-    expect(lobby.agents.get("b")!.wins).toBe(0);
-    expect(lobby.agents.get("b")!.losses).toBe(0);
-
-    // Resolve the bets (which should call recordFightResult)
-    const result = lobby.resolveSideBets(fightId);
-
-    // After resolution, agent a should have 1 win, agent b should have 1 loss
-    expect(result.winner).toBe("a");
-    expect(lobby.agents.get("a")!.wins).toBe(1);
-    expect(lobby.agents.get("a")!.losses).toBe(0);
-    expect(lobby.agents.get("b")!.wins).toBe(0);
-    expect(lobby.agents.get("b")!.losses).toBe(1);
-  });
-
 });
-
-// Helper for "fight not over" test
-function setupActiveFight(lobby: Lobby): string {
-  lobby.registerAgent("a", "#A", "0x1", "default");
-  lobby.registerAgent("b", "#B", "0x2", "default");
-  const challenge = lobby.createChallenge("a", "b", 10);
-  const fight = lobby.acceptChallenge(challenge.id, "b");
-  return fight.getState().fightId;
-}

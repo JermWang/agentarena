@@ -278,11 +278,9 @@ export class BetManager {
         let payout: Decimal;
 
         if (bet.backedAgentId === winnerId) {
-          // Winner: proportional share of net pool
+          // Winner: proportional share of net pool (post-rake)
           status = "won";
-          payout = bet.amount.plus(
-            bet.amount.dividedBy(winnerPool).times(loserPool)
-          );
+          payout = bet.amount.dividedBy(winnerPool).times(netPool);
 
           // Credit winner balance
           await tx.user.update({

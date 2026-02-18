@@ -1,99 +1,91 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Lobby } from "../../src/state/lobby.js";
 
-describe("Lobby challenge expiration", () => {
-  let lobby: Lobby;
+vi.mock("../../src/db/client.js", () => ({
+  prisma: {
+    pitLog: {
+      create: vi.fn().mockResolvedValue({ id: "log_1" }),
+    },
+  },
+}));
+
+import { Pit } from "../../src/state/pit.js";
+
+describe("Pit callout lifecycle", () => {
+  let pit: Pit;
+
+  const ws = () => ({ readyState: 1, send: vi.fn() }) as any;
 
   beforeEach(() => {
-    lobby = new Lobby();
-    lobby.registerAgent("challenger", "#C", "0x1", "default");
-    lobby.registerAgent("target", "#T", "0x2", "default");
+    pit = new Pit();
+    pit.agents.set("challenger", {
+      ws: ws(),
+      agentId: "challenger",
+      username: "challenger_user",
+      characterId: "ronin",
+      elo: 1000,
+      wins: 0,
+      losses: 0,
+    });
+    pit.agents.set("target", {
+      ws: ws(),
+      agentId: "target",
+      username: "target_user",
+      characterId: "knight",
+      elo: 1000,
+      wins: 0,
+      losses: 0,
+    });
   });
 
-  it("creates a challenge with expiresAt ~5 minutes in the future", () => {
-    const beforeCreation = Date.now();
-    const challenge = lobby.createChallenge("challenger", "target", 10);
-    const afterCreation = Date.now();
+  it("creates a callout that expires in ~60 seconds", () => {
+    const before = Date.now();
+    const result = pit.createCallout("challenger", "target_user", 50000, "fight me");
+    const after = Date.now();
 
-    expect(challenge.expiresAt).toBeDefined();
-    expect(challenge.expiresAt).toBeGreaterThanOrEqual(beforeCreation + 5 * 60 * 1000);
-    expect(challenge.expiresAt).toBeLessThanOrEqual(afterCreation + 5 * 60 * 1000);
+    expect(result.ok).toBe(true);
+    expect(result.callout).toBeDefined();
+    expect(result.callout!.expiresAt).toBeGreaterThanOrEqual(before + 60_000);
+    expect(result.callout!.expiresAt).toBeLessThanOrEqual(after + 60_000);
   });
 
-  it("throws when accepting an expired challenge", () => {
-    const challenge = lobby.createChallenge("challenger", "target", 10);
-    
-    // Manually set expiresAt to the past
-    challenge.expiresAt = Date.now() - 1000;
+  it("rate limits repeated callouts from the same agent (8s)", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
 
-    // Attempting to accept should throw "Challenge not pending"
-    // because acceptChallenge marks expired challenges as "expired"
-    expect(() => lobby.acceptChallenge(challenge.id, "target")).toThrow("Challenge not pending");
+    const first = pit.createCallout("challenger", "target_user", 50000, "first");
+    const second = pit.createCallout("challenger", "target_user", 50000, "second");
 
-    // Verify the challenge was marked as expired
-    const storedChallenge = lobby.challenges.get(challenge.id);
-    expect(storedChallenge?.status).toBe("expired");
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(false);
+    expect(second.error).toMatch(/rate limited/i);
+
+    nowSpy.mockRestore();
   });
 
-  it("cleanExpiredChallenges marks old challenges as expired", () => {
-    // Create three challenges
-    const challenge1 = lobby.createChallenge("challenger", "target", 10);
-    const challenge2 = lobby.createChallenge("challenger", "target", 20);
-    const challenge3 = lobby.createChallenge("challenger", "target", 30);
+  it("rejects accept when the callout is expired", () => {
+    const created = pit.createCallout("challenger", "target_user", 50000, "expired soon");
+    expect(created.ok).toBe(true);
 
-    // Manually set two of them to be expired (past expiresAt)
-    challenge1.expiresAt = Date.now() - 10000;
-    challenge2.expiresAt = Date.now() - 5000;
-    challenge3.expiresAt = Date.now() + 100000; // Still valid
+    created.callout!.expiresAt = Date.now() - 1;
 
-    // Run cleanup
-    const expiredCount = lobby.cleanExpiredChallenges();
-
-    // Should have marked 2 challenges as expired
-    expect(expiredCount).toBe(2);
-
-    // Verify statuses
-    expect(lobby.challenges.get(challenge1.id)?.status).toBe("expired");
-    expect(lobby.challenges.get(challenge2.id)?.status).toBe("expired");
-    expect(lobby.challenges.get(challenge3.id)?.status).toBe("pending");
+    const accepted = pit.acceptCallout(created.callout!.id, "target");
+    expect(accepted.ok).toBe(false);
+    expect(accepted.error).toMatch(/expired/i);
   });
 
-  it("cleanExpiredChallenges returns 0 when no challenges are expired", () => {
-    const challenge1 = lobby.createChallenge("challenger", "target", 10);
-    const challenge2 = lobby.createChallenge("challenger", "target", 20);
+  it("cleanExpired removes only expired callouts", () => {
+    const c1 = pit.createCallout("challenger", "target_user", 50000, "one").callout!;
+    c1.expiresAt = Date.now() - 1;
 
-    // All challenges have future expiresAt times (from createChallenge)
-    const expiredCount = lobby.cleanExpiredChallenges();
+    // Move time forward to avoid callout rate-limit for c2 creation
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 9_000);
+    const c2 = pit.createCallout("challenger", "target_user", 50000, "two").callout!;
+    nowSpy.mockRestore();
 
-    expect(expiredCount).toBe(0);
-    expect(lobby.challenges.get(challenge1.id)?.status).toBe("pending");
-    expect(lobby.challenges.get(challenge2.id)?.status).toBe("pending");
-  });
+    c2.expiresAt = Date.now() + 30_000;
 
-  it("cleanExpiredChallenges does not mark non-pending challenges", () => {
-    const challenge = lobby.createChallenge("challenger", "target", 10);
-    
-    // Accept the challenge first
-    const fight = lobby.acceptChallenge(challenge.id, "target");
-    
-    // Now set it to be "old" by expiration time
-    challenge.expiresAt = Date.now() - 10000;
+    pit.cleanExpired();
 
-    // cleanExpiredChallenges should only clean pending ones
-    const expiredCount = lobby.cleanExpiredChallenges();
-
-    expect(expiredCount).toBe(0);
-    expect(lobby.challenges.get(challenge.id)?.status).toBe("accepted");
-  });
-
-  it("acceptChallenge succeeds for valid (non-expired) challenges", () => {
-    const challenge = lobby.createChallenge("challenger", "target", 10);
-
-    // Challenge should not be expired yet
-    const fight = lobby.acceptChallenge(challenge.id, "target");
-
-    expect(fight).toBeDefined();
-    expect(fight.getState().fightId).toBeDefined();
-    expect(lobby.challenges.get(challenge.id)?.status).toBe("accepted");
+    expect(pit.callouts.has(c1.id)).toBe(false);
+    expect(pit.callouts.has(c2.id)).toBe(true);
   });
 });

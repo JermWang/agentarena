@@ -5,7 +5,7 @@ import bs58 from "bs58";
 import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { prisma } from "../db/client.js";
 import type { Pit } from "../state/pit.js";
 import type { FightManager } from "../state/fight-manager.js";
@@ -13,9 +13,13 @@ import type { BetManager } from "../state/bet-manager.js";
 import { isValidSolanaAddress, SOLANA_ADDRESS_REGEX } from "../chain/abi.js";
 import { Decimal } from "@prisma/client/runtime/library.js";
 import { config } from "../config.js";
+import { betLimiter } from "../middleware/rate-limit.js";
 
 const WALLET_REGEX = SOLANA_ADDRESS_REGEX;
 const SIDE_BET_CHALLENGE_TTL_MS = 5 * 60_000;
+const AGENT_ACTION_CHALLENGE_TTL_MS = 5 * 60_000;
+const API_KEY_SCAN_BATCH_SIZE = 500;
+const ZERO_DECIMAL = new Decimal(0);
 
 /**
  * Verify a Solana wallet signature (ed25519)
@@ -54,8 +58,180 @@ function buildSideBetMessage(args: {
 const ClaimAgentBody = z.object({
   api_key: z.string().min(1),
   wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+  nonce: z.string().min(1),
   signature: z.string().min(1),
 });
+
+const ClaimAgentChallengeBody = z.object({
+  api_key: z.string().min(1),
+  wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+});
+
+const RotateApiKeyChallengeBody = z.object({
+  username: z.string().min(1),
+  wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+});
+
+const RotateApiKeyBody = z.object({
+  username: z.string().min(1),
+  wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+  nonce: z.string().min(1),
+  signature: z.string().min(1),
+});
+
+const TransferAgentChallengeBody = z.object({
+  username: z.string().min(1),
+  wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+  new_wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+});
+
+const TransferAgentBody = z.object({
+  username: z.string().min(1),
+  wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+  new_wallet_address: z.string().regex(SOLANA_ADDRESS_REGEX, "Invalid wallet address"),
+  nonce: z.string().min(1),
+  signature: z.string().min(1),
+});
+
+type AgentAction = "claim_agent" | "rotate_api_key" | "transfer_agent";
+
+function hashApiKey(apiKey: string): string {
+  return createHash("sha256").update(apiKey).digest("hex");
+}
+
+async function findAgentByApiKey(apiKey: string) {
+  const digest = hashApiKey(apiKey);
+  const digestMatch = await prisma.agent.findFirst({ where: { apiKeyDigest: digest } });
+  if (digestMatch && await bcrypt.compare(apiKey, digestMatch.apiKeyHash)) {
+    return digestMatch;
+  }
+
+  let cursor: string | undefined;
+  while (true) {
+    const agents = await prisma.agent.findMany({
+      take: API_KEY_SCAN_BATCH_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: "asc" },
+    });
+    if (agents.length === 0) break;
+
+    for (const agent of agents) {
+      if (await bcrypt.compare(apiKey, agent.apiKeyHash)) {
+        if (agent.apiKeyDigest !== digest) {
+          void prisma.agent.update({
+            where: { id: agent.id },
+            data: { apiKeyDigest: digest },
+          }).catch(() => {});
+        }
+        return agent;
+      }
+    }
+
+    cursor = agents[agents.length - 1].id;
+  }
+
+  return null;
+}
+
+function buildAgentActionMessage(args: {
+  action: AgentAction;
+  walletAddress: string;
+  username: string;
+  nonce: string;
+  expiresAtIso: string;
+  newWalletAddress?: string;
+}): string {
+  const lines = [
+    "Agent Battle Arena authorization",
+    `Action: ${args.action}`,
+    `Wallet: ${args.walletAddress}`,
+    `Agent: ${args.username}`,
+  ];
+  if (args.newWalletAddress) {
+    lines.push(`New Wallet: ${args.newWalletAddress}`);
+  }
+  lines.push(`Nonce: ${args.nonce}`);
+  lines.push(`Expires: ${args.expiresAtIso}`);
+  return lines.join("\n");
+}
+
+async function issueAgentActionChallenge(args: {
+  action: AgentAction;
+  walletAddress: string;
+  username: string;
+  newWalletAddress?: string;
+}) {
+  const nonce = randomBytes(16).toString("hex");
+  const expiresAt = new Date(Date.now() + AGENT_ACTION_CHALLENGE_TTL_MS);
+  const message = buildAgentActionMessage({
+    action: args.action,
+    walletAddress: args.walletAddress,
+    username: args.username,
+    newWalletAddress: args.newWalletAddress,
+    nonce,
+    expiresAtIso: expiresAt.toISOString(),
+  });
+
+  await prisma.withdrawalNonce.create({
+    data: {
+      nonce,
+      walletAddress: args.walletAddress,
+      amount: ZERO_DECIMAL,
+      message,
+      expiresAt,
+    },
+  });
+
+  return { nonce, message, expiresAt };
+}
+
+async function verifyAndConsumeAgentActionChallenge(args: {
+  nonce: string;
+  walletAddress: string;
+  signature: string;
+  expectedMessage: (expiresAtIso: string) => string;
+}): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const challenge = await prisma.withdrawalNonce.findUnique({ where: { nonce: args.nonce } });
+  if (!challenge) {
+    return { ok: false, status: 400, error: "Invalid or expired authorization" };
+  }
+  if (challenge.walletAddress !== args.walletAddress) {
+    return { ok: false, status: 400, error: "Authorization wallet mismatch" };
+  }
+  if (!challenge.amount.equals(ZERO_DECIMAL)) {
+    return { ok: false, status: 400, error: "Authorization payload mismatch" };
+  }
+  if (challenge.usedAt) {
+    return { ok: false, status: 409, error: "Authorization already used" };
+  }
+  if (challenge.expiresAt.getTime() < Date.now()) {
+    return { ok: false, status: 400, error: "Authorization expired" };
+  }
+
+  const expected = args.expectedMessage(challenge.expiresAt.toISOString());
+  if (challenge.message !== expected) {
+    return { ok: false, status: 400, error: "Authorization payload mismatch" };
+  }
+
+  const validSignature = verifySolanaSignature(args.walletAddress, challenge.message, args.signature);
+  if (!validSignature) {
+    return { ok: false, status: 401, error: "Invalid signature" };
+  }
+
+  const consume = await prisma.withdrawalNonce.updateMany({
+    where: {
+      nonce: args.nonce,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    data: { usedAt: new Date() },
+  });
+  if (consume.count !== 1) {
+    return { ok: false, status: 409, error: "Authorization could not be consumed" };
+  }
+
+  return { ok: true };
+}
 
 interface RouterDeps {
   pit: Pit;
@@ -166,37 +342,65 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
     }
   });
 
-  // --- Claim agent with wallet signature ---
-  router.post("/arena/claim-agent", async (req: Request, res: Response) => {
+  // --- Claim agent with wallet signature (nonce challenge) ---
+  router.post("/arena/claim-agent/challenge", async (req: Request, res: Response) => {
     try {
-      const { api_key, wallet_address, signature } = ClaimAgentBody.parse(req.body);
-
-      // Find agent by API key (same bcrypt scan pattern as ws.ts auth)
-      const agents = await prisma.agent.findMany({ take: 1000 });
-      let targetAgent = null;
-      for (const agent of agents) {
-        if (await bcrypt.compare(api_key, agent.apiKeyHash)) {
-          targetAgent = agent;
-          break;
-        }
-      }
+      const { api_key, wallet_address } = ClaimAgentChallengeBody.parse(req.body);
+      const targetAgent = await findAgentByApiKey(api_key);
       if (!targetAgent) {
         return res.status(401).json({ ok: false, error: "Invalid API key" });
       }
-
-      // Check if already claimed by a different wallet
       if (targetAgent.ownerWallet !== "pending" && targetAgent.ownerWallet !== wallet_address) {
         return res.status(403).json({ ok: false, error: "Agent already claimed by another wallet" });
       }
 
-      // Verify wallet signature (Solana ed25519)
-      const message = `I own agent ${targetAgent.username} on Agent Battle Arena`;
-      const valid = verifySolanaSignature(wallet_address, message, signature);
-      if (!valid) {
-        return res.status(401).json({ ok: false, error: "Invalid signature" });
+      const challenge = await issueAgentActionChallenge({
+        action: "claim_agent",
+        walletAddress: wallet_address,
+        username: targetAgent.username,
+      });
+
+      return res.json({
+        ok: true,
+        nonce: challenge.nonce,
+        message: challenge.message,
+        expiresAt: challenge.expiresAt.toISOString(),
+      });
+    } catch (e: any) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, error: e.errors[0].message });
+      }
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/arena/claim-agent", async (req: Request, res: Response) => {
+    try {
+      const { api_key, wallet_address, nonce, signature } = ClaimAgentBody.parse(req.body);
+      const targetAgent = await findAgentByApiKey(api_key);
+      if (!targetAgent) {
+        return res.status(401).json({ ok: false, error: "Invalid API key" });
+      }
+      if (targetAgent.ownerWallet !== "pending" && targetAgent.ownerWallet !== wallet_address) {
+        return res.status(403).json({ ok: false, error: "Agent already claimed by another wallet" });
       }
 
-      // Upsert User and update agent in a transaction
+      const verified = await verifyAndConsumeAgentActionChallenge({
+        nonce,
+        walletAddress: wallet_address,
+        signature,
+        expectedMessage: (expiresAtIso) => buildAgentActionMessage({
+          action: "claim_agent",
+          walletAddress: wallet_address,
+          username: targetAgent.username,
+          nonce,
+          expiresAtIso,
+        }),
+      });
+      if (!verified.ok) {
+        return res.status(verified.status).json({ ok: false, error: verified.error });
+      }
+
       const updatedAgent = await prisma.$transaction(async (tx) => {
         await tx.user.upsert({
           where: { walletAddress: wallet_address },
@@ -210,12 +414,12 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
         });
       });
 
-      res.json({ ok: true, agent: updatedAgent });
+      return res.json({ ok: true, agent: updatedAgent });
     } catch (e: any) {
       if (e instanceof z.ZodError) {
         return res.status(400).json({ ok: false, error: e.errors[0].message });
       }
-      res.status(500).json({ ok: false, error: e.message });
+      return res.status(500).json({ ok: false, error: e.message });
     }
   });
 
@@ -301,14 +505,10 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
     }
   });
 
-  // --- Rotate API key ---
-  router.post("/arena/rotate-api-key", async (req: Request, res: Response) => {
+  // --- Rotate API key (nonce challenge) ---
+  router.post("/arena/rotate-api-key/challenge", async (req: Request, res: Response) => {
     try {
-      const { username, wallet_address, signature } = req.body;
-      if (!username || !wallet_address || !signature) {
-        return res.status(400).json({ ok: false, error: "Missing required fields" });
-      }
-
+      const { username, wallet_address } = RotateApiKeyChallengeBody.parse(req.body);
       const agent = await prisma.agent.findUnique({ where: { username } });
       if (!agent) {
         return res.status(404).json({ ok: false, error: "Agent not found" });
@@ -317,55 +517,138 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
         return res.status(403).json({ ok: false, error: "Not the owner of this agent" });
       }
 
-      // Verify wallet signature (Solana ed25519)
-      const message = `Rotate API key for agent ${username} on Agent Battle Arena`;
-      const valid = verifySolanaSignature(wallet_address, message, signature);
-      if (!valid) {
-        return res.status(401).json({ ok: false, error: "Invalid signature" });
-      }
-
-      // Generate new key and update hash
-      const apiKey = `sk_${nanoid(32)}`;
-      const apiKeyHash = await bcrypt.hash(apiKey, 10);
-
-      await prisma.agent.update({
-        where: { id: agent.id },
-        data: { apiKeyHash },
+      const challenge = await issueAgentActionChallenge({
+        action: "rotate_api_key",
+        walletAddress: wallet_address,
+        username,
       });
 
-      res.json({ ok: true, api_key: apiKey });
+      return res.json({
+        ok: true,
+        nonce: challenge.nonce,
+        message: challenge.message,
+        expiresAt: challenge.expiresAt.toISOString(),
+      });
     } catch (e: any) {
-      res.status(500).json({ ok: false, error: e.message });
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, error: e.errors[0].message });
+      }
+      return res.status(500).json({ ok: false, error: e.message });
     }
   });
 
-  // --- Transfer agent ownership ---
-  router.post("/arena/transfer-agent", async (req: Request, res: Response) => {
+  router.post("/arena/rotate-api-key", async (req: Request, res: Response) => {
     try {
-      const { username, new_wallet_address, signature } = req.body;
-      if (!username || !new_wallet_address || !signature) {
-        return res.status(400).json({ ok: false, error: "Missing required fields" });
-      }
-      if (!WALLET_REGEX.test(new_wallet_address)) {
-        return res.status(400).json({ ok: false, error: "Invalid wallet address" });
-      }
-
+      const { username, wallet_address, nonce, signature } = RotateApiKeyBody.parse(req.body);
       const agent = await prisma.agent.findUnique({ where: { username } });
       if (!agent) {
         return res.status(404).json({ ok: false, error: "Agent not found" });
+      }
+      if (agent.ownerWallet !== wallet_address) {
+        return res.status(403).json({ ok: false, error: "Not the owner of this agent" });
+      }
+
+      const verified = await verifyAndConsumeAgentActionChallenge({
+        nonce,
+        walletAddress: wallet_address,
+        signature,
+        expectedMessage: (expiresAtIso) => buildAgentActionMessage({
+          action: "rotate_api_key",
+          walletAddress: wallet_address,
+          username,
+          nonce,
+          expiresAtIso,
+        }),
+      });
+      if (!verified.ok) {
+        return res.status(verified.status).json({ ok: false, error: verified.error });
+      }
+
+      const apiKey = `sk_${nanoid(32)}`;
+      const apiKeyHash = await bcrypt.hash(apiKey, 10);
+      const apiKeyDigest = hashApiKey(apiKey);
+
+      await prisma.agent.update({
+        where: { id: agent.id },
+        data: { apiKeyHash, apiKeyDigest },
+      });
+
+      return res.json({ ok: true, api_key: apiKey });
+    } catch (e: any) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, error: e.errors[0].message });
+      }
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // --- Transfer agent ownership (nonce challenge) ---
+  router.post("/arena/transfer-agent/challenge", async (req: Request, res: Response) => {
+    try {
+      const { username, wallet_address, new_wallet_address } = TransferAgentChallengeBody.parse(req.body);
+      const agent = await prisma.agent.findUnique({ where: { username } });
+      if (!agent) {
+        return res.status(404).json({ ok: false, error: "Agent not found" });
+      }
+      if (agent.ownerWallet !== wallet_address) {
+        return res.status(403).json({ ok: false, error: "Not the owner of this agent" });
       }
       if (agent.ownerWallet === "pending") {
         return res.status(400).json({ ok: false, error: "Agent must be claimed before transferring" });
       }
 
-      // Verify wallet signature from current owner (Solana ed25519)
-      const message = `Transfer agent ${username} to ${new_wallet_address} on Agent Battle Arena`;
-      const valid = verifySolanaSignature(agent.ownerWallet, message, signature);
-      if (!valid) {
-        return res.status(401).json({ ok: false, error: "Invalid signature" });
+      const challenge = await issueAgentActionChallenge({
+        action: "transfer_agent",
+        walletAddress: wallet_address,
+        username,
+        newWalletAddress: new_wallet_address,
+      });
+
+      return res.json({
+        ok: true,
+        nonce: challenge.nonce,
+        message: challenge.message,
+        expiresAt: challenge.expiresAt.toISOString(),
+      });
+    } catch (e: any) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, error: e.errors[0].message });
+      }
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/arena/transfer-agent", async (req: Request, res: Response) => {
+    try {
+      const { username, wallet_address, new_wallet_address, nonce, signature } = TransferAgentBody.parse(req.body);
+      const agent = await prisma.agent.findUnique({ where: { username } });
+      if (!agent) {
+        return res.status(404).json({ ok: false, error: "Agent not found" });
+      }
+      if (agent.ownerWallet !== wallet_address) {
+        return res.status(403).json({ ok: false, error: "Not the owner of this agent" });
+      }
+      if (agent.ownerWallet === "pending") {
+        return res.status(400).json({ ok: false, error: "Agent must be claimed before transferring" });
       }
 
-      // Transfer in a transaction
+      const verified = await verifyAndConsumeAgentActionChallenge({
+        nonce,
+        walletAddress: wallet_address,
+        signature,
+        expectedMessage: (expiresAtIso) => buildAgentActionMessage({
+          action: "transfer_agent",
+          walletAddress: wallet_address,
+          username,
+          newWalletAddress: new_wallet_address,
+          nonce,
+          expiresAtIso,
+        }),
+      });
+      if (!verified.ok) {
+        return res.status(verified.status).json({ ok: false, error: verified.error });
+      }
+
       const updatedAgent = await prisma.$transaction(async (tx) => {
         await tx.user.upsert({
           where: { walletAddress: new_wallet_address },
@@ -379,17 +662,17 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
         });
       });
 
-      res.json({ ok: true, agent: updatedAgent });
+      return res.json({ ok: true, agent: updatedAgent });
     } catch (e: any) {
       if (e instanceof z.ZodError) {
         return res.status(400).json({ ok: false, error: e.errors[0].message });
       }
-      res.status(500).json({ ok: false, error: e.message });
+      return res.status(500).json({ ok: false, error: e.message });
     }
   });
 
   // --- Place side bet ---
-  router.post("/arena/side-bet/challenge", async (req: Request, res: Response) => {
+  router.post("/arena/side-bet/challenge", betLimiter, async (req: Request, res: Response) => {
     try {
       const challengeSchema = z.object({
         fight_id: z.string().min(1),
@@ -454,7 +737,7 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
     }
   });
 
-  router.post("/arena/side-bet", async (req: Request, res: Response) => {
+  router.post("/arena/side-bet", betLimiter, async (req: Request, res: Response) => {
     try {
       const SideBetBody = z.object({
         fight_id: z.string().min(1),

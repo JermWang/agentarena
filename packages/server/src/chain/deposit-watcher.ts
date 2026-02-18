@@ -95,7 +95,7 @@ export async function startDepositWatcher(): Promise<void> {
         if (sig.err) continue; // Skip failed transactions
 
         try {
-          const tx = await connection.getParsedTransaction(sig.signature, {
+          const tx = await conn.getParsedTransaction(sig.signature, {
             maxSupportedTransactionVersion: 0,
           });
           if (!tx) continue;
@@ -227,7 +227,7 @@ function getSourceOwner(tx: ParsedTransactionWithMeta, tokenAccount: string): st
  */
 export function stopDepositWatcher(): void {
   if (watchInterval) {
-    clearInterval(watchInterval);
+    clearTimeout(watchInterval);
     watchInterval = null;
     console.log("[Deposit Watcher] Stopped");
   }
@@ -247,6 +247,15 @@ export async function processDeposit(
   try {
     // Use a transaction to ensure atomicity
     await prisma.$transaction(async (tx) => {
+      const existingDeposit = await tx.transaction.findFirst({
+        where: { txHash: txSignature, type: "deposit" },
+        select: { id: true },
+      });
+      if (existingDeposit) {
+        console.log(`[Deposit Watcher] Skipping already processed deposit tx: ${txSignature}`);
+        return;
+      }
+
       // Look up or create user
       let user = await tx.user.findUnique({
         where: { walletAddress: fromAddress },

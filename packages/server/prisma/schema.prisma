@@ -28,6 +28,7 @@ model Agent {
   characterId     String      @default("ronin")
   skillsMd        String      @default("")
   apiKeyHash      String
+  apiKeyDigest    String?
   wins            Int         @default(0)
   losses          Int         @default(0)
   elo             Int         @default(1000)
@@ -40,6 +41,7 @@ model Agent {
   fightsWon       Fight[]     @relation("FightWinner")
 
   @@index([username])
+  @@index([apiKeyDigest])
   @@index([elo])
   @@index([isDemo])
 }

@@ -219,8 +219,22 @@ export default function ProfilePage() {
     setClaimError("");
 
     try {
-      const message = `I own agent ${claimUsername} on Agent Battle Arena`;
-      const signature = await signMessageAsync({ message });
+      const challengeRes = await fetch(`${SERVER}/api/v1/arena/claim-agent/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: claimApiKey,
+          wallet_address: address,
+        }),
+      });
+      const challengeData = await challengeRes.json();
+      if (!challengeData.ok) {
+        setClaimError(challengeData.error || "Claim failed");
+        setClaimStatus("error");
+        return;
+      }
+
+      const signature = await signMessageAsync({ message: challengeData.message });
       setClaimStatus("submitting");
 
       const res = await fetch(`${SERVER}/api/v1/arena/claim-agent`, {
@@ -229,6 +243,7 @@ export default function ProfilePage() {
         body: JSON.stringify({
           api_key: claimApiKey,
           wallet_address: address,
+          nonce: challengeData.nonce,
           signature,
         }),
       });
@@ -260,14 +275,35 @@ export default function ProfilePage() {
     setTransferStatus("signing");
     setTransferError("");
     try {
-      const message = `Transfer agent ${username} to ${transferWallet} on Agent Battle Arena`;
-      const signature = await signMessageAsync({ message });
+      const challengeRes = await fetch(`${SERVER}/api/v1/arena/transfer-agent/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          wallet_address: address,
+          new_wallet_address: transferWallet,
+        }),
+      });
+      const challengeData = await challengeRes.json();
+      if (!challengeData.ok) {
+        setTransferError(challengeData.error || "Transfer failed");
+        setTransferStatus("error");
+        return;
+      }
+
+      const signature = await signMessageAsync({ message: challengeData.message });
       setTransferStatus("submitting");
 
       const res = await fetch(`${SERVER}/api/v1/arena/transfer-agent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, new_wallet_address: transferWallet, signature }),
+        body: JSON.stringify({
+          username,
+          wallet_address: address,
+          new_wallet_address: transferWallet,
+          nonce: challengeData.nonce,
+          signature,
+        }),
       });
       const data = await res.json();
 
@@ -293,14 +329,25 @@ export default function ProfilePage() {
     setRotateError("");
     setNewApiKey("");
     try {
-      const message = `Rotate API key for agent ${username} on Agent Battle Arena`;
-      const signature = await signMessageAsync({ message });
+      const challengeRes = await fetch(`${SERVER}/api/v1/arena/rotate-api-key/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, wallet_address: address }),
+      });
+      const challengeData = await challengeRes.json();
+      if (!challengeData.ok) {
+        setRotateError(challengeData.error || "Rotation failed");
+        setRotateStatus("error");
+        return;
+      }
+
+      const signature = await signMessageAsync({ message: challengeData.message });
       setRotateStatus("submitting");
 
       const res = await fetch(`${SERVER}/api/v1/arena/rotate-api-key`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, wallet_address: address, signature }),
+        body: JSON.stringify({ username, wallet_address: address, nonce: challengeData.nonce, signature }),
       });
       const data = await res.json();
 

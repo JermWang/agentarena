@@ -3,6 +3,7 @@ import type { Server } from "http";
 import { nanoid } from "nanoid";
 import bcrypt from "bcrypt";
 import { z } from "zod";
+import { createHash } from "crypto";
 import { PublicKey } from "@solana/web3.js";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
@@ -17,6 +18,11 @@ import { isBlockedUsername } from "../middleware/validate.js";
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{1,15}$/;
 const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const HEARTBEAT_INTERVAL = 30_000;
+const API_KEY_SCAN_BATCH_SIZE = 500;
+
+function hashApiKey(apiKey: string): string {
+  return createHash("sha256").update(apiKey).digest("hex");
+}
 
 /**
  * Verify a Solana wallet signature (ed25519)
@@ -89,6 +95,40 @@ export function setupWebSocket(server: Server) {
   const matchmaker = new Matchmaker();
   const fightManager = new FightManager();
   const betManager = new BetManager();
+
+  async function findAgentByApiKey(apiKey: string) {
+    const digest = hashApiKey(apiKey);
+    const digestMatch = await prisma.agent.findFirst({ where: { apiKeyDigest: digest } });
+    if (digestMatch && await bcrypt.compare(apiKey, digestMatch.apiKeyHash)) {
+      return digestMatch;
+    }
+
+    let cursor: string | undefined;
+    while (true) {
+      const agents = await prisma.agent.findMany({
+        take: API_KEY_SCAN_BATCH_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: "asc" },
+      });
+      if (agents.length === 0) break;
+
+      for (const agent of agents) {
+        if (await bcrypt.compare(apiKey, agent.apiKeyHash)) {
+          if (agent.apiKeyDigest !== digest) {
+            void prisma.agent.update({
+              where: { id: agent.id },
+              data: { apiKeyDigest: digest },
+            }).catch(() => {});
+          }
+          return agent;
+        }
+      }
+
+      cursor = agents[agents.length - 1].id;
+    }
+
+    return null;
+  }
 
   // --- Helper: send JSON to a WebSocket ---
   function send(ws: WebSocket, msg: unknown): void {
@@ -358,6 +398,7 @@ export function setupWebSocket(server: Server) {
 
             const apiKey = `sk_${nanoid(32)}`;
             const apiKeyHash = await bcrypt.hash(apiKey, 10);
+            const apiKeyDigest = hashApiKey(apiKey);
 
             // Keep registration claim-later friendly: ensure owner wallet exists,
             // including the "pending" placeholder used before users claim ownership.
@@ -372,6 +413,7 @@ export function setupWebSocket(server: Server) {
                 username: data.name,
                 characterId: data.character,
                 apiKeyHash,
+                apiKeyDigest,
                 ownerWallet,
               },
             });
@@ -388,15 +430,7 @@ export function setupWebSocket(server: Server) {
           // --- AUTH: authenticate with API key, join The Pit ---
           case "auth": {
             const data = AuthMsg.parse(msg);
-            // Find agent by key prefix for efficiency (future: store prefix)
-            const agents = await prisma.agent.findMany({ take: 1000 });
-            let authedAgent = null;
-            for (const agent of agents) {
-              if (await bcrypt.compare(data.api_key, agent.apiKeyHash)) {
-                authedAgent = agent;
-                break;
-              }
-            }
+            const authedAgent = await findAgentByApiKey(data.api_key);
             if (!authedAgent) {
               send(ws, { type: "error", error: "Invalid API key" });
               return;
