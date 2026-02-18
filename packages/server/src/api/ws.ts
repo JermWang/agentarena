@@ -181,16 +181,18 @@ export function setupWebSocket(server: Server) {
   // --- Helper: start a fight between two agents ---
   async function startFight(agent1Id: string, agent2Id: string, wager: number): Promise<void> {
     const fightId = nanoid();
-    fightManager.createFight(fightId, agent1Id, agent2Id, wager);
 
-    // Persist to DB
+    // Persist first so in-memory fights never reference missing DB rows.
     try {
       await prisma.fight.create({
         data: { id: fightId, agent1Id, agent2Id, wagerAmount: wager, status: "active" },
       });
     } catch (e) {
       console.error("Failed to persist fight:", e);
+      return;
     }
+
+    fightManager.createFight(fightId, agent1Id, agent2Id, wager);
 
     // Get agent usernames for display
     const a1 = pit.agents.get(agent1Id);
@@ -252,6 +254,14 @@ export function setupWebSocket(server: Server) {
     const roundWinner = state.p1.hp <= 0 ? active.agent2Id : state.p2.hp <= 0 ? active.agent1Id : null;
 
     try {
+      const exists = await prisma.fight.findUnique({
+        where: { id: fightId },
+        select: { id: true },
+      });
+      if (!exists) {
+        // Can happen after admin resets while process still has in-memory fights.
+        return;
+      }
       await prisma.fightRound.create({
         data: {
           fightId,
