@@ -524,23 +524,24 @@ function FightsView() {
                 <div style={{
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  gap: 0,
+                  justifyContent: "space-evenly",
                   marginBottom: 12,
                 }}>
                   {/* Agent 1 side */}
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
-                    <img
-                      src={`/sprites/${f.characters[0]}-preview.png`}
-                      alt={f.agents[0]}
-                      style={{
-                        width: 80,
-                        height: 80,
-                        flexShrink: 0,
-                        imageRendering: "pixelated",
-                        filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
-                      }}
-                    />
+                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", minWidth: 100 }}>
+                    <div style={{ width: 80, height: 80, flexShrink: 0 }}>
+                      <img
+                        src={`/sprites/${f.characters[0]}-preview.png`}
+                        alt={f.agents[0]}
+                        width={80}
+                        height={80}
+                        style={{
+                          display: "block",
+                          imageRendering: "pixelated",
+                          filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
+                        }}
+                      />
+                    </div>
                     <span style={{
                       color: "#3939ff",
                       fontSize: 13,
@@ -548,7 +549,7 @@ function FightsView() {
                       fontFamily: "monospace",
                       marginTop: 4,
                       textAlign: "center",
-                      maxWidth: 120,
+                      maxWidth: 140,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -588,19 +589,21 @@ function FightsView() {
                   </div>
 
                   {/* Agent 2 side */}
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
-                    <img
-                      src={`/sprites/${f.characters[1]}-preview.png`}
-                      alt={f.agents[1]}
-                      style={{
-                        width: 80,
-                        height: 80,
-                        flexShrink: 0,
-                        imageRendering: "pixelated",
-                        filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
-                        transform: "scaleX(-1)",
-                      }}
-                    />
+                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", minWidth: 100 }}>
+                    <div style={{ width: 80, height: 80, flexShrink: 0 }}>
+                      <img
+                        src={`/sprites/${f.characters[1]}-preview.png`}
+                        alt={f.agents[1]}
+                        width={80}
+                        height={80}
+                        style={{
+                          display: "block",
+                          imageRendering: "pixelated",
+                          filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
+                          transform: "scaleX(-1)",
+                        }}
+                      />
+                    </div>
                     <span style={{
                       color: "#ff3939",
                       fontSize: 13,
@@ -608,7 +611,7 @@ function FightsView() {
                       fontFamily: "monospace",
                       marginTop: 4,
                       textAlign: "center",
-                      maxWidth: 120,
+                      maxWidth: 140,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
