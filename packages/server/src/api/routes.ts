@@ -20,6 +20,15 @@ const SIDE_BET_CHALLENGE_TTL_MS = 5 * 60_000;
 const AGENT_ACTION_CHALLENGE_TTL_MS = 5 * 60_000;
 const API_KEY_SCAN_BATCH_SIZE = 500;
 const ZERO_DECIMAL = new Decimal(0);
+const STATS_BASELINE_FIGHTS = Number.parseInt(process.env.STATS_BASELINE_FIGHTS ?? "4116", 10);
+const STATS_BASELINE_AGENTS = Number.parseInt(process.env.STATS_BASELINE_AGENTS ?? "102", 10);
+
+function applyStatsBaseline(total: number, baseline: number): number {
+  if (!Number.isFinite(baseline) || baseline <= 0) {
+    return total;
+  }
+  return Math.max(0, total - baseline);
+}
 
 /**
  * Verify a Solana wallet signature (ed25519)
@@ -294,8 +303,8 @@ export function createRouter({ pit, fightManager, betManager }: RouterDeps): Rou
       res.json({
         ok: true,
         stats: {
-          totalFights,
-          totalAgents,
+          totalFights: applyStatsBaseline(totalFights, STATS_BASELINE_FIGHTS),
+          totalAgents: applyStatsBaseline(totalAgents, STATS_BASELINE_AGENTS),
           activeFights: fightManager.activeFights.size,
           pitAgents: pit.agents.size,
         },
