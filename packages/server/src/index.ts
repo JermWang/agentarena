@@ -38,16 +38,6 @@ server.listen(config.port, async () => {
   if (config.botWorker.enabled) {
     const botWorker = new BotWorker();
     await botWorker.start();
-    
-    // Graceful shutdown
-    process.on("SIGTERM", () => {
-      console.log("[Server] SIGTERM received, stopping bot worker...");
-      botWorker.stop();
-    });
-    process.on("SIGINT", () => {
-      console.log("[Server] SIGINT received, stopping bot worker...");
-      botWorker.stop();
-    });
   }
 });
 
