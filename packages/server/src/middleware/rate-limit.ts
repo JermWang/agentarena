@@ -26,7 +26,18 @@ export function rateLimit(name: string, config: RateLimitConfig) {
   }, 60_000);
 
   return (req: Request, res: Response, next: NextFunction) => {
-    const key = req.ip ?? "unknown";
+    // Keep live counters responsive even under heavy launch traffic.
+    if (req.method === "GET" && req.path === "/arena/stats") {
+      return next();
+    }
+
+    const forwarded = req.headers["x-forwarded-for"];
+    const forwardedIp = Array.isArray(forwarded)
+      ? forwarded[0]
+      : typeof forwarded === "string"
+        ? forwarded.split(",")[0]?.trim()
+        : undefined;
+    const key = forwardedIp || req.ip || "unknown";
     const now = Date.now();
     const entry = store.get(key);
 

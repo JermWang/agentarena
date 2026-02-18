@@ -131,7 +131,6 @@ export class BotWorker {
     if (this.bots.size >= this.config.maxBots) return;
 
     this.botCounter++;
-    const username = this.generateBotName();
     const character = CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
     const walletAddress = `${this.config.demoWalletPrefix}_${nanoid(8)}`;
 
@@ -147,16 +146,33 @@ export class BotWorker {
         update: {},
       });
 
-      // Create the demo agent
-      const agent = await prisma.agent.create({
-        data: {
-          username,
-          characterId: character,
-          apiKeyHash,
-          ownerWallet: walletAddress,
-          isDemo: true,
-        },
-      });
+      // Create the demo agent. Retry on rare username collisions.
+      let agent: { id: string; username: string } | null = null;
+      let username = "";
+      for (let attempt = 0; attempt < 5; attempt++) {
+        username = this.generateBotName();
+        try {
+          agent = await prisma.agent.create({
+            data: {
+              username,
+              characterId: character,
+              apiKeyHash,
+              ownerWallet: walletAddress,
+              isDemo: true,
+            },
+            select: { id: true, username: true },
+          });
+          break;
+        } catch (e: any) {
+          if (e?.code === "P2002") {
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!agent) {
+        throw new Error("Failed to allocate unique bot username after retries");
+      }
 
       // Create and start the bot
       const bot = new ArenaBot(username, {

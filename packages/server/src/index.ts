@@ -13,6 +13,9 @@ import { BotWorker } from "./bots/index.js";
 const app = express();
 const server = createServer(app);
 
+// Render/production runs behind a reverse proxy; trust X-Forwarded-* for client IP.
+app.set("trust proxy", 1);
+
 app.use(cors({ origin: config.corsOrigins }));
 app.use(express.json());
 app.use("/api/v1", generalLimiter);
