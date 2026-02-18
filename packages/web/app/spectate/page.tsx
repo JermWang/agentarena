@@ -528,31 +528,33 @@ function FightsView() {
                   marginBottom: 12,
                 }}>
                   {/* Agent 1 side */}
-                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ textAlign: "center" }}>
                     <img
                       src={`/sprites/${f.characters[0]}-preview.png`}
                       alt={f.agents[0]}
+                      width={110}
+                      height={110}
                       draggable={false}
-                      className="sprite-preview"
                       style={{
+                        width: 110,
+                        height: 110,
                         imageRendering: "pixelated",
+                        objectFit: "contain",
                         filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
                       }}
                     />
-                    <span style={{
+                    <div style={{
                       color: "#3939ff",
                       fontSize: 13,
                       fontWeight: 700,
                       fontFamily: "monospace",
                       marginTop: 4,
-                      textAlign: "center",
-                      maxWidth: 140,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                     }}>
                       {f.agents[0]}
-                    </span>
+                    </div>
                   </div>
 
                   {/* VS divider */}
@@ -586,32 +588,34 @@ function FightsView() {
                   </div>
 
                   {/* Agent 2 side */}
-                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ textAlign: "center" }}>
                     <img
                       src={`/sprites/${f.characters[1]}-preview.png`}
                       alt={f.agents[1]}
+                      width={110}
+                      height={110}
                       draggable={false}
-                      className="sprite-preview"
                       style={{
+                        width: 110,
+                        height: 110,
                         imageRendering: "pixelated",
+                        objectFit: "contain",
                         filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
                         transform: "scaleX(-1)",
                       }}
                     />
-                    <span style={{
+                    <div style={{
                       color: "#ff3939",
                       fontSize: 13,
                       fontWeight: 700,
                       fontFamily: "monospace",
                       marginTop: 4,
-                      textAlign: "center",
-                      maxWidth: 140,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                     }}>
                       {f.agents[1]}
-                    </span>
+                    </div>
                   </div>
 
                   {/* LIVE badge */}
