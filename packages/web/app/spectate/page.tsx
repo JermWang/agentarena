@@ -528,23 +528,19 @@ function FightsView() {
                   marginBottom: 12,
                 }}>
                   {/* Agent 1 side */}
-                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", minWidth: 100 }}>
-                    <div style={{ width: 80, height: 80, flexShrink: 0 }}>
-                      <img
-                        src={`/sprites/${f.characters[0]}-preview.png`}
-                        alt={f.agents[0]}
-                        width={80}
-                        height={80}
-                        style={{
-                          display: "block",
-                          width: 80,
-                          height: 80,
-                          maxWidth: "none",
-                          imageRendering: "pixelated",
-                          filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
-                        }}
-                      />
-                    </div>
+                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+                    <img
+                      src={`/sprites/${f.characters[0]}-preview.png`}
+                      alt={f.agents[0]}
+                      width={100}
+                      height={100}
+                      draggable={false}
+                      style={{
+                        imageRendering: "pixelated",
+                        objectFit: "contain",
+                        filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
+                      }}
+                    />
                     <span style={{
                       color: "#3939ff",
                       fontSize: 13,
@@ -592,24 +588,20 @@ function FightsView() {
                   </div>
 
                   {/* Agent 2 side */}
-                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", minWidth: 100 }}>
-                    <div style={{ width: 80, height: 80, flexShrink: 0 }}>
-                      <img
-                        src={`/sprites/${f.characters[1]}-preview.png`}
-                        alt={f.agents[1]}
-                        width={80}
-                        height={80}
-                        style={{
-                          display: "block",
-                          width: 80,
-                          height: 80,
-                          maxWidth: "none",
-                          imageRendering: "pixelated",
-                          filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
-                          transform: "scaleX(-1)",
-                        }}
-                      />
-                    </div>
+                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+                    <img
+                      src={`/sprites/${f.characters[1]}-preview.png`}
+                      alt={f.agents[1]}
+                      width={100}
+                      height={100}
+                      draggable={false}
+                      style={{
+                        imageRendering: "pixelated",
+                        objectFit: "contain",
+                        filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
+                        transform: "scaleX(-1)",
+                      }}
+                    />
                     <span style={{
                       color: "#ff3939",
                       fontSize: 13,
