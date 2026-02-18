@@ -8,6 +8,7 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+img.sprite-preview { height: 110px; width: auto; max-width: unset; display: block; }
 
 body {
   background:

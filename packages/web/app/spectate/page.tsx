@@ -532,12 +532,10 @@ function FightsView() {
                     <img
                       src={`/sprites/${f.characters[0]}-preview.png`}
                       alt={f.agents[0]}
-                      width={100}
-                      height={100}
                       draggable={false}
+                      className="sprite-preview"
                       style={{
                         imageRendering: "pixelated",
-                        objectFit: "contain",
                         filter: "drop-shadow(0 0 8px rgba(57,57,255,0.5))",
                       }}
                     />
@@ -592,12 +590,10 @@ function FightsView() {
                     <img
                       src={`/sprites/${f.characters[1]}-preview.png`}
                       alt={f.agents[1]}
-                      width={100}
-                      height={100}
                       draggable={false}
+                      className="sprite-preview"
                       style={{
                         imageRendering: "pixelated",
-                        objectFit: "contain",
                         filter: "drop-shadow(0 0 8px rgba(255,57,57,0.5))",
                         transform: "scaleX(-1)",
                       }}
