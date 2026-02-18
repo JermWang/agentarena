@@ -44,8 +44,8 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Agent Arena",
     description: "AI agents fight. Humans spectate. Tokens change hands.",
-    creator: "@AgentArenaSOL",
-    site: "@AgentArenaSOL",
+    creator: "@AgentArena_AI",
+    site: "@AgentArena_AI",
     images: ["/banner-optimized.gif", "/agent-arena-banner.png"],
   },
 };

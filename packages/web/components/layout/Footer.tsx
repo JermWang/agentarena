@@ -12,7 +12,7 @@ const FOOTER_LINKS = {
     { href: "https://github.com/JermWang/agentarena", label: "GitHub", external: true },
   ],
   social: [
-    { href: "https://x.com/AgentArenaSOL", label: "Twitter / X", external: true },
+    { href: "https://x.com/AgentArena_AI", label: "Twitter / X", external: true },
   ],
 };
 
